@@ -1,0 +1,111 @@
+#! /usr/bin/env python3
+
+"""Add a missing_value attribute to integer-packed variables"""
+
+# MGH 2017-07-25
+#   - Written. The rncpack6 script was changed today to add
+#     a missing_value attribute, for the benefit of software like
+#     xarray. This script fixes previously-packed files. 
+
+import sys
+import os
+import numpy as np
+from netCDF4 import Dataset
+from datetime import datetime
+
+from optparse import OptionParser
+
+# The fix dictionary keeps track of the variables we want to fix
+fix = {}
+
+def determine(file_in):
+    # Open input netCDF object
+    nc0 = Dataset(file_in, 'r')
+    # Work through the file finding integer-packed variables that require fixing
+    v0 = nc0.variables
+    for n in v0:
+        if v0[n].dtype == np.dtype('int16'):
+            att = v0[n].ncattrs()
+            if not 'missing_value' in att:
+                if 'valid_range' in att:
+                    if 'scale_factor' in att:
+                        if 'add_offset' in att:
+                            fix[n] = True
+
+def process(file_in, file_out, over):
+    if fix != {}:
+        # Specify name for temporary output file
+        file_tmp = '{}.pid{}.rncfix.tmp'.format(file_out,os.getpid())
+        # Open input and output netCDF objects
+        nc0 = Dataset(file_in, 'r')
+        nc1 = Dataset(file_tmp, 'w', True, 'NETCDF3_CLASSIC')
+        # Copy global attributes
+        for a in nc0.ncattrs():
+            a0 = getattr(nc0, a)
+            if a == 'history':
+                a0 = 'Processed with rncpfix at {:%Y-%m-%d %H:%M:%S UTC}\n{}'.format(datetime.utcnow(),a0)
+            nc1.setncattr(a, a0)
+        # Copy dimensions
+        for n,o in nc0.dimensions.items():
+            if o.isunlimited():
+                nc1.createDimension(n)
+            else:
+                nc1.createDimension(n, len(o))
+        # Copy variables and associated attributes, fixing as necessary.
+        v0 = nc0.variables
+        for n,o in v0.items():
+            v = nc1.createVariable(n, o.dtype, o.dimensions)
+            for a in o.ncattrs():
+                if a != '_FillValue':
+                    v.setncattr(a, getattr(o, a))
+            if n in fix:
+                valid_range = v.getncattr('valid_range')
+                v.setncattr('missing_value', valid_range[0]-np.int16(1))
+        # Copy variable data
+        v1 = nc1.variables
+        for n in v0:
+            # For arrays, loop over the first dimension.
+            shape = v0[n].shape
+            if len(shape) > 0:
+                for r in range(shape[0]):
+                    v1[n][r] = v0[n][r]
+            else:
+                v1[n][:] = v0[n][:]
+        # Finished!
+        nc0.close()
+        nc1.close()
+        # Copy temporary output file to its destination
+        if os.path.isfile(file_out):
+            if over:
+                os.remove(file_out)
+            else:
+                raise IOError(2, 'Output file {} exists, not overwritten'.format(file_out))
+        os.rename(file_tmp,file_out)
+
+def main():
+    usage = __doc__ + "\n\n  %prog file_in [file_out] [options]"
+    op = OptionParser(usage=usage)
+    op.add_option("-O", "--overwrite",
+                  action="store_true", default=False,
+                  help="Overwrite output file without prompting")
+    (opts, args) = op.parse_args()
+    if len(args) == 0:
+        sys.exit('This script requires at least one positional argument')
+    elif len(args) == 1:
+        file_in = args[0]
+        file_out = args[0]
+    elif len(args) == 2:
+        file_in = args[0]
+        file_out = args[1]
+    else:
+        sys.exit('This script requires no more than 2 positional arguments')
+    try:
+        determine(file_in)
+        print(('Processing {} to {}'.format(file_in, file_out)))
+        process(file_in, file_out, opts.overwrite)
+    except (IOError, OSError) as err:
+        _, strerr = err.args
+        sys.exit(strerr)
+
+if __name__ == '__main__':
+    main()

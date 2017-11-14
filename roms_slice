@@ -1,0 +1,71 @@
+#! /usr/bin/env bash
+
+# Script to extract a surface slice (and optionally a bottom slice)
+# from a ROMS history file and save the result in a new netCDF file.
+
+set -e
+
+# Process command-line switches
+
+while getopts "b" opt; do
+  case "$opt" in
+    b)
+        btm=1
+        ;;
+  esac
+done
+shift $(( $OPTIND-1 ))
+
+# Check arguments
+
+if test -n "$1"
+then
+  i=$1
+else
+  echo "Input file name not specified" 1>&2
+  exit 1
+fi
+
+if !(test -f $i)
+then
+  echo "Input file "$i" does not exist" 1>&2
+  exit 1
+fi
+
+if test -n "$2"
+then
+  o=$2
+else
+  # The following very clever awk code looks for ".nc" at the end
+  # of each file name and replaces it with "_sfc.nc", or if it is not
+  # found just adds "_sfc.nc" anyway
+  o=$(echo $i | awk '{ sub(/.nc$/, ""); print }')_sfc.nc
+fi
+
+if test -n "$btm"
+then
+  echo "Saving surface & bottom slices from" $i "to" $o
+else
+  echo "Saving surface slice from" $i "to" $o
+fi
+
+# Use ncdump to establish number of levels in input
+
+n=$(ncdump -h $i | grep "s_rho =" | cut -d " " -f 3)
+nm1=$((n-1))
+
+# Construct command
+
+cmd="ncks -D 1 -O"
+if test -n "$btm"
+then
+  cmd=$cmd" -d s_w,0 -d s_rho,0"
+fi
+cmd=$cmd" -d s_w,$n -d s_rho,$nm1 $i $o"
+
+# Do it
+
+$cmd
+
+
+

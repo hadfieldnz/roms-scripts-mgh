@@ -1,0 +1,80 @@
+#! /usr/bin/env bash
+
+# Given a netCDF file with m records, for a specified value of n,
+# produce a file with m/n consecutive n-record averages.
+
+# MGH 2013-07-04:
+#   Written, generalising ravg5d.
+
+set -e
+
+# Process command-line switches
+
+n=5
+
+while getopts "n:" opt
+do
+  case "$opt" in
+    n)
+      n=${OPTARG}
+      ;;
+  esac
+done
+shift $(( ${OPTIND}-1 ))
+
+# Check arguments
+
+if test -n "$1"
+then
+    i=$1
+else
+    echo "Input file name not specified" 1>&2
+    exit 1
+fi
+
+if !(test -f $i)
+then
+    echo "Input file "$i" does not exist" 1>&2
+    exit 1
+fi
+
+if test -n "$2"
+then
+    o=$2
+else
+    # The following very clever awk code looks for ".nc" at the end
+    # of each file name and replaces it with "_a${n}.nc", or if it is not
+    # found just adds "_a${n}.nc" anyway
+    o=$(echo $i | awk '{ sub(/.nc$/, ""); print }')_a${n}.nc
+fi
+
+# Use ncdump to establish the number of records. For info on shell brace
+# expansions, see
+# http://www.ibm.com/developerworks/library/l-bash.html#N1010B
+
+m=$(ncdump -h $i | grep "UNLIMITED ; //" | cut -d " " -f 6)
+m=${m#*(}
+
+r=$((m / n))
+
+# Loop over output records, constructing one file per record.
+
+k=0
+until [ $k -eq $r ]
+do
+    tmp=${o}.tmp$(printf %5.5d $k)
+    echo "Creating temporary average file "$tmp
+    ncra -O -d ocean_time,$((k*n)),$(((k+1)*n-1)) -o $tmp $i
+    k=$((k + 1))
+done
+
+# Concatenate and clean up
+
+echo "Concatenating "${n}"-record averages into "${o}
+ncrcat -O -D 1 -o ${o} ${o}.tmp?????
+
+echo "Deleting temporary files"
+rm ${o}.tmp?????
+
+
+

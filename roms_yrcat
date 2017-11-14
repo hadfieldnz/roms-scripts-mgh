@@ -1,0 +1,64 @@
+#! /usr/bin/env python
+
+"""\
+Ryrcat works on a series of ROMS-output netCDF files that are assumed to
+contain 5-day average data for one or more 365-day years (but not normally
+with one file per year). For each year specified as a command-line argument,
+it extracts the records for that year and writes them to a netCDF output file.
+"""
+import sys
+import os
+import glob
+
+try:
+    from optparse import OptionParser
+except:
+    from optik import OptionParser
+
+def main():
+    usage = __doc__ + "\n\n  %prog [options] [years]"
+    op = OptionParser(usage=usage)
+    op.add_option("-i", "--input-pattern",
+                      action="store", type="string", dest="iptn",
+                      default="roms_avg_5d_[0-9][0-9][0-9][0-9].nc",
+                      help="Input file name pattern; default is " \
+                           "roms_avg_5d_[0-9][0-9][0-9][0-9].nc. " \
+                           "Make sure to quote this appropriately.")
+    op.add_option("-o", "--output-format",
+                      action="store", type="string", dest="ofmt",
+                      default="roms_avg_5d_yr_%2.2d.nc",
+                      help="Output file name format; default is "
+                           "roms_avg_5d_yr%2.2d.nc.")
+    op.add_option("--overwrite",
+                      action="store_true", default=False, dest="over",
+                      help="Overwrite output files without prompting")
+    op.add_option("-y", "--year-length",
+                      action="store", type="float", dest="yrlen",
+                      default=365.0,
+                      help="Year length in days; default=365.0")
+    (opts, args) = op.parse_args()
+    if len(args) == 0:
+        sys.exit('No years specified')
+    try:
+        infiles = glob.glob(opts.iptn)
+        if not infiles:
+            raise IOError, (1, 'No match for input pattern')
+        infiles.sort()
+        for a in args:
+            outfile = opts.ofmt%(long(a))
+            tr0 = 24*3600*opts.yrlen*(long(a)-1)
+            tr1 = 24*3600*opts.yrlen*long(a)
+            cmd = "ncrcat -D 1"
+            if opts.over:
+                cmd = cmd+" -O"
+            cmd = cmd+" -d ocean_time,%.1f,%.1f" \
+                      " -o %s %s"%(tr0,tr1,outfile,' '.join(infiles))
+            status = os.system(cmd)
+            if status:
+                raise IOError, (status, 'Command failed: '+cmd)
+    except (IOError, OSError), (errno, strerr):
+        sys.exit(strerr)
+
+if __name__ == '__main__':
+    main()
+

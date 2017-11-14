@@ -1,0 +1,53 @@
+#! /usr/bin/env bash
+
+# Script to extract velocity data from a ROMS history file, along
+# with related grid variables and save the result in a new netCDF file.
+
+# Modification hsitory
+#
+# MGH 2010-07-28
+#   Fixed bug: Vstretch and Vtransform missing from list of variables
+#   to be copied over.
+
+set -e
+
+# Check arguments
+
+if test -n "$1"
+then
+  i=$1
+else
+  echo "Input file name not specified" 1>&2
+  exit 1
+fi
+
+if !(test -f $i)
+then
+  echo "Input file "$i" does not exist" 1>&2
+  exit 1
+fi
+
+if test -n "$2"
+then
+  o=$2
+else
+  # The following very clever awk code looks for ".nc" at the end
+  # of each file name and replaces it with "_uv.nc", or if it is not
+  # found just adds "_uv.nc" anyway
+  o=$(echo $i | awk '{ sub(/.nc$/, ""); print }')_uv.nc
+fi
+
+echo "Saving velocity data from" $i "to" $o
+
+# Construct command
+
+vars=u,v,ubar,vbar,theta_s,theta_b,Tcline,hc,Vstretching,Vtransform,s_rho,Cs_r,h,pm,pn,lon_rho,lat_rho,lon_u,lat_u,lon_v,lat_v,angle,mask_rho,mask_u,mask_v,ocean_time
+
+cmd="ncks -D 1 -O -v ${vars} $i $o"
+
+# Do it
+
+$cmd
+
+
+

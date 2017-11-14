@@ -1,0 +1,106 @@
+#! /usr/bin/env bash
+
+# Script to collate ROMS source code from one or more sources into a
+# single tree.
+
+set -e
+
+# Specify defaults
+
+outdir="."
+
+path="${ROMS_ROOT}/roms-new"
+
+# Process command-line switches
+
+while getopts "d:fp:v" opt
+do
+  case "$opt" in
+    d)
+      outdir=${OPTARG}
+      ;;
+    f)
+      as_file=1
+      ;;
+    p)
+      path=${OPTARG}
+      ;;
+    v)
+      verbose=1
+      ;;
+  esac
+done
+shift $(( ${OPTIND}-1 ))
+
+# Check that there are no remaining arguments
+
+if test -n "$1"
+then
+  echo Positional arguments not permitted
+  exit 1
+fi
+
+# Check path is not empty
+
+if test -z "${path}"
+then
+  echo ROMS search path is empty
+  exit 1
+fi
+
+# This script requires Gnu cp. Allow the path to this command to be specified
+# via an environment variable.
+
+if test -n "${CP}"
+then
+  cp=${CP}
+else
+  cp=cp
+fi
+
+echo Collating ROMS source
+
+# Calculate a reversed-order copy of the search path
+
+n_path=`echo -n ${path} | wc -w`
+
+while test $n_path -gt 0
+do
+  rpath=${rpath}" "$(echo ${path} | cut -d " " -f ${n_path})
+  n_path=$((${n_path}-1))
+done
+
+unset n_path
+
+# Create destination directory if necessary.
+
+if !(test -d ${outdir})
+then
+  mkdir -p ${outdir}
+fi
+
+# Copy the contents of each directories in the reversed search path
+# into the output directory, either as a regular file or as a link.
+
+# The time taken to do the following varies widely: if the search path
+# contains network paths it can take several minutes.
+
+if test -n "${as_file}"
+then
+  echo "Copying files as regular files to output directory "${outdir}
+  cmd=${cp}
+else
+  echo "Copying files as links to output directory "${outdir}
+  cmd="${cp} --symbolic"
+fi
+
+if test -n "${verbose}"
+then
+  cmd=${cmd}" --verbose"
+fi
+
+for srcdir in ${rpath}
+do
+  echo "Copying from "${srcdir}
+  ${cmd} --force --recursive ${srcdir}/* ${outdir}
+done

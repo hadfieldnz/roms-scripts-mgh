@@ -1,0 +1,209 @@
+#! /usr/bin/env python3
+
+"""Pack a ROMS output netCDF file using float->integer encoding"""
+
+# MGH 2015-12-07
+#   - Written, based on rncpack5. In this variant, the data range
+#     for each variable is pre-specified.
+# MGH 2016-01-20
+#   - Bug fix: meant to set w data range to [-1,1] but actually set
+#     the v data range to this value!
+# MGH 2017-07-17
+#   - Converted to Python3.
+# MGH 2017-07-24
+#   - Use new-style string formatting.
+# MGH 2017-07-25
+#   - Added a missing_value attribute to packed variables for the
+#     benefit of packages (Python xarray) that don't recognise
+#     valid_range.
+#   - Changed "from numpy import *" to "import numpy as np".
+# MGH 2017-08-02
+#   - Changed code for raising and catching errors, in line
+#     with PEP-3151.
+
+import sys
+import os
+import errno
+import re
+import fnmatch
+import warnings
+import numpy as np
+from netCDF4 import Dataset
+from datetime import datetime
+
+from optparse import OptionParser
+
+# Note that the general approach is to suppress warnings for
+# floating point operations, when these are expected, but
+# then test the results for validity
+
+# Constants for packing data in short-integer (int16) form
+pack_range = np.array([-32766,32767], dtype=np.int16)
+
+# Specified data ranges
+data_range = {}
+data_range['zeta'] = [-10,10]
+data_range['ubar'] = [-10,10]
+data_range['vbar'] = [-10,10]
+data_range['u'] = [-10,10]
+data_range['v'] = [-10,10]
+data_range['w'] = [-1,1]
+data_range['temp'] = [-5,45]
+data_range['salt'] = [0,40]
+data_range['Hsbl'] = [-6000,10]
+data_range['Hbbl'] = [-6000,10]
+
+# The pack dictionary will contain parameters required for packing
+# the float/double variables in the input file
+pack = {}
+
+def renan(x):
+    # A utility function for the determine method.
+    if hasattr(x,'mask'):
+        return nan
+    else:
+        return x
+
+def determine(file_in, exclude):
+    # Open input netCDF object
+    nc0 = Dataset(file_in, 'r')
+    # Work through the file: for non-scalar float variables, determine the minimum and
+    # maximum of the data, and calculate scaling parameters for packing to integers.
+    # Exclude variables with a "units" or "long_name" attribute containing the word
+    # "since" (i.e. time variables), as the extraction & packing process does not work
+    # for these. Also exclude variables that appear in the exclude list.
+    v0 = nc0.variables
+    xlist = exclude.split(',')
+    for n in v0:
+        shape = v0[n].shape
+        ok = True
+        if len(shape) == 0:
+            ok = False
+        if ok:
+            if not (v0[n].dtype == np.dtype('float32') or v0[n].dtype == np.dtype('float64')):
+                ok = False
+        if ok:
+            if n not in data_range:
+                ok = False
+        if ok:
+            for x in xlist:
+               if fnmatch.fnmatch(n, x):
+                   ok = False
+        if ok:
+            if 'units' in v0[n].ncattrs():
+                if re.match('^.*since.*$', v0[n].units):
+                    ok = False
+        if ok:
+            if 'long_name' in v0[n].ncattrs():
+                if re.match('^.*since.*$', v0[n].long_name):
+                    ok = False
+        # Proceed with packing
+        if ok:
+            dmin = data_range[n][0]
+            dmax = data_range[n][1]
+            # Calculate the linear transformation required to pack data
+            # from the data range to the packed integer range. See IDL
+            # function MGH_ROMS_NORM_COORD. Note:
+            #   - The pack range is promoted to float32 before the
+            #     calculations to avoid integer overflow.
+            #   - Result is saved as float32: there's no point in using
+            #     float64 as the packing discards precision.
+            pmin = np.float32(pack_range[0])
+            pmax = np.float32(pack_range[1])
+            off = np.float32(((dmin*pmax)-(dmax*pmin))/(pmax-pmin))
+            fac = np.float32((dmax-dmin)/(pmax-pmin))
+            pack[n] = {'method': 0, 'off': off, 'fac': fac}
+
+def process(file_in, file_out, over):
+    # Specify name for temporary output file
+    file_tmp = '{}.pid{}.rncpack6.tmp'.format(file_out,os.getpid())
+    # Open input and output netCDF objects
+    nc0 = Dataset(file_in, 'r')
+    nc1 = Dataset(file_tmp, 'w', True, 'NETCDF3_CLASSIC')
+    # Copy global attributes
+    for a in nc0.ncattrs():
+        a0 = getattr(nc0, a)
+        if a == 'history':
+            a0 = 'Processed with rncpack6 at {:%Y-%m-%d %H:%M:%S UTC}\n{}'.format(datetime.utcnow(),a0)
+        nc1.setncattr(a, a0)
+    # Copy dimensions
+    for n,o in nc0.dimensions.items():
+        if o.isunlimited():
+            nc1.createDimension(n)
+        else:
+            nc1.createDimension(n, len(o))
+    # Copy variables and associated attributes. Keep track of
+    # variables to be packed.
+    v0 = nc0.variables
+    for n,o in v0.items():
+        if n in pack:
+            if pack[n]['method'] == 0:
+                v = nc1.createVariable(n, 'i2', o.dimensions)
+            elif pack[n]['method'] == 1:
+                v = nc1.createVariable(n, 'f4', o.dimensions, least_significant_digit=pack[n]['digit'])
+        else:
+            v = nc1.createVariable(n, o.dtype, o.dimensions)
+        for a in o.ncattrs():
+            if a != '_FillValue':
+                v.setncattr(a, getattr(o, a))
+        if n in pack:
+            if pack[n]['method'] == 0:
+                v.setncattr('add_offset', pack[n]['off'])
+                v.setncattr('scale_factor', pack[n]['fac'])
+                v.setncattr('valid_range', pack_range)
+                v.setncattr('missing_value', pack_range[0]-np.int16(1))
+    # Copy variable data. Packing and unpacking is done automatically!!!
+    v1 = nc1.variables
+    for n in v0:
+        # Direct NumPy to ignore overflows
+        err = np.seterr(over='ignore')
+        # For arrays, loop over the first dimension.
+        shape = v0[n].shape
+        if len(shape) > 0:
+            for r in range(shape[0]):
+                v1[n][r] = v0[n][r]
+        else:
+            v1[n][:] = v0[n][:]
+        np.seterr(over=err['over'])
+    # Finished!
+    nc0.close()
+    nc1.close()
+    # Copy temporary output file to its destination
+    if os.path.isfile(file_out):
+        if over:
+            os.remove(file_out)
+        else:
+            raise OSError(errno.EEXIST, 'Output file {} exists, not overwritten'.format(file_out))
+    os.rename(file_tmp,file_out)
+
+def main():
+    usage = __doc__ + "\n\n  %prog file_in [file_out] [options]"
+    op = OptionParser(usage=usage)
+    op.add_option("-O", "--overwrite",
+                  action="store_true", default=False,
+                  help="Overwrite output file without prompting")
+    op.add_option("-x", "--exclude",
+                  action="store", type="string", dest="exclude", default="", metavar="EXCL",
+                  help="Comma-separated list of variable-name patterns to exclude from packing")
+    (opts, args) = op.parse_args()
+    if len(args) == 0:
+        sys.exit('This script requires at least one positional argument')
+    elif len(args) == 1:
+        file_in = args[0]
+        file_out = args[0]
+    elif len(args) == 2:
+        file_in = args[0]
+        file_out = args[1]
+    else:
+        sys.exit('This script requires no more than 2 positional arguments')
+    try:
+        print('Determining packing for {}'.format(file_in))
+        determine(file_in, opts.exclude)
+        print(('Packing {} to {}'.format(file_in, file_out)))
+        process(file_in, file_out, opts.overwrite)
+    except OSError as err:
+        _, strerr = err.args
+        sys.exit(strerr)
+
+if __name__ == '__main__':
+    main()

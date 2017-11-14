@@ -1,0 +1,326 @@
+#! /usr/bin/env python
+
+"""Create script and input files for ROMS simulations"""
+
+# MGH 2009-10-22
+#   - The default location of the executable is now the current
+#   working directory. The bldir function is no longer required and
+#   has been deleted.
+#   - Added support for Moab scripts.
+# MGH 2010-03-02
+#   - Moab MPI scripts revamped.
+# MGH 2010-04-3
+#   - Moab MPI scripts further changed: the job is no longer
+#     constrained to run on the minimum number of nodes.
+# MGH 2010-10-20
+#   - Added the ability to produce LoadLeveler scripts; removed
+#     ability to produce Qsub scripts or Mosrun scripts.
+# MGH 2011-11-25
+#   - Removed "node_usage = not_shared" line from Loadleveler parallel
+#     scripts.
+# MGH 2012-09-13
+#   - Corrected expression used to calculate n_node for Fitzroy MPI
+#     jobs.
+#   - Add jobid field in output file name for Fitzroy Loadleveler jobs.
+# MGH 2012-10-01
+#   - Add account option to support the account_no Loadleveler keyword
+#     on Fitzroy
+# MGH 2012-10-04
+#   - Changed default class for LoadLeveler jobs to General.
+# MGH 2012-10-05
+#   - LoadLeveler class option is now associated with the queue command-line
+#     option (which is already used for Moab jobs).
+# MGH 2012-10-17
+#   - Removed jobid field from output log file name (but left it in output
+#     err file name) for Fitzroy Loadleveler jobs.
+#   - Default wall clock limit on Loadleveler jobs increased from 12 to 24
+#     hours.
+# MGH 2012-10-17
+#   - Removed jobid field from output err file name for Fitzroy Loadleveler
+#     jobs.
+# MGH 2013-06-19
+#   - Changed MP_* environment variables set for MPI Loadleveler runs: removed
+#     existing settings and added MP_TIMEOUT=300 to work around a delay in
+#     setting up process on Fitzroy.
+#   - Added calls to data before & after invoking ROMS in Loadleveler scripts.
+#   - Names of script files changed to rom???.ll (Loadleveler), rom???.msub (Msub)
+#     and rom???.sh (shell script).
+# MGH 2014-06-30
+#   - Default account now COBR1404.
+# MGH 2015-08-12
+#   - For Loadleveler jobs, added network.MPI directive to run on Infiniband.
+#   - Fixed up indentation problems caused by tab->space conversion.
+
+from __future__ import division
+
+import sys
+import os
+import re
+import math
+
+try:
+    from optparse import OptionParser
+except:
+    from optik import OptionParser
+
+p = re.compile('<<|>>')
+
+def mkinput(index, tfile, ni, nj):
+    infile = open(tfile,'r')
+    outname = 'rom%3.3d.in'%(index)
+    sys.stderr.write('Writing ROMS input file '+outname+'\n')
+    outfile = open(outname, 'wb')
+    for line in infile.xreadlines():
+        if not line.startswith("!"):
+            # Split the line with the pre-compiled regular
+            # expression. This results in a list in which every second
+            # item (or should be) a Python expression to be evaluated
+            # and written into the file
+            llist = p.split(line)
+            for ii in range(1,len(llist),2):
+                llist[ii] = str(eval(llist[ii]))
+            line = ''.join(llist)
+        outfile.write(line)
+    infile.close()
+    outfile.close()
+
+def mk_llsub(index, n_pro, resub, mpi, openmp, queue, acct, wall, exe):
+    outname = 'rom%3.3d.ll'%(index)
+    sys.stderr.write('Writing LoadLeveler script file %s\n'%(outname))
+    outfile = open(outname, 'wb')
+    if mpi:
+        # Some Fitzroy-specific code
+        n_node = 1+(n_pro-1)//64
+        if n_pro >= 32:
+            usage = 'not_shared'
+        else:
+            usage = 'shared'
+        outfile.write(
+            '#! /bin/bash\n'
+            '#@ job_name         = ocean\n'
+            '#@ output           = rom%3.3d.log\n'
+            '#@ error            = rom%3.3d.err\n'
+            '#@ job_type         = parallel\n'
+            '#@ network.MPI      = sn_all,,US\n'
+            '#@ class            = %s\n'
+            '#@ account_no       = %s\n'
+            '#@ total_tasks      = %d\n'
+            '#@ task_affinity    = cpu(1)\n'
+            '#@ node             = %d\n'
+            '#@ notification     = never\n'
+            '#@ wall_clock_limit = %s\n'
+            '#@ node_usage       = %s\n'
+            '#@ queue\n'
+            '\n'
+            'export MP_TIMEOUT=300\n'
+            'date\n'
+            'poe %s rom%3.3d.in\n'
+            'date\n'
+            %(index, index, queue, acct, n_pro, n_node, wall, usage, exe, 
+              index)
+            )
+    elif openmp:
+        outfile.write(
+            '#! /bin/bash\n'
+            '#@ job_name         = ocean\n'
+            '#@ output           = rom%3.3d.log\n'
+            '#@ error            = rom%3.3d.err\n'
+            '#@ class            = %s\n'
+            '#@ account_no       = %s\n'
+            '#@ notification     = never\n'
+            '#@ wall_clock_limit = %s\n'
+            '#@ node_usage       = shared\n'
+            '#@ queue\n'
+            '\n'
+            'export OMP_NUM_THREADS=%d\n'
+            'date\n'
+            '%s < rom%3.3d.in\n'
+            'date\n'
+            %(index, index, queue, acct, wall,n_pro, exe, index)
+            )
+    else:
+        outfile.write(
+            '#! /bin/bash\n'
+            '#@ job_name         = ocean\n'
+            '#@ output           = rom%3.3d.log\n'
+            '#@ error            = rom%3.3d.err\n'
+            '#@ class            = %s\n'
+            '#@ account_no       = %s\n'
+            '#@ node_usage       = shared\n'
+            '#@ notification     = never\n'
+            '#@ wall_clock_limit = %s\n'
+            '#@ queue\n'
+            '\n'
+            'date\n'
+            '%s < rom%3.3d.in\n'
+            'date\n'
+            %(index, index, queue, acct, wall, exe, index)
+            )
+    if resub:
+        outfile.write(
+            'llsubmit rom%3.3d.ll\n'
+            %(index+1)
+            )
+    outfile.close()
+
+def mk_msub(index, n_pro, resub, mpi, openmp, queue, wall, exe):
+    # Make MSUB script for the Turbine cluster, which has 8
+    # processors per node
+    outname = 'rom%3.3d.msub'%(index)
+    sys.stderr.write('Writing MSUB script file '+outname+'\n')
+    outfile = open(outname, 'wb')
+    if mpi:
+        outfile.write(
+            '#MSUB -S /bin/bash\n'
+            '#MSUB -v LD_LIBRARY_PATH\n'
+            '#MSUB -q %s\n'
+            '#MSUB -l walltime=%s\n'
+            '#MSUB -l nodes=%d\n'
+            '\n'
+            'mpirun -np %d %s rom%3.3d.in > rom%3.3d.log\n'
+            %(queue,wall,n_pro,n_pro,exe,index,index)
+            )
+    elif openmp:
+        ppn=min(n_pro,8)
+        outfile.write(
+            '#MSUB -S /bin/bash\n'
+            '#MSUB -v LD_LIBRARY_PATH\n'
+            '#MSUB -q %s\n'
+            '#MSUB -l walltime=%s\n'
+            '#MSUB -l nodes=%d\n'
+            '\n'
+            'export OMP_NUM_THREADS=%d\n'
+            '%s < rom%3.3d.in > rom%3.3d.log\n'
+            %(queue,wall,n_pro,n_pro,exe,index,index)
+            )
+    else:
+        outfile.write(
+            '#MSUB -S /bin/bash\n'
+            '#MSUB -v LD_LIBRARY_PATH,OMP_NUM_THREADS\n'
+            '#MSUB -q %s\n'
+            '#MSUB -l walltime=%s\n'
+            '#MSUB -l nodes=1\n'
+            '\n'
+            '%s < rom%3.3d.in > rom%3.3d.log\n'
+            %(queue,wall,exe,index,index)
+            )
+    if resub:
+        outfile.write(
+            'msub rom%3.3d.msub\n'
+            %(index+1)
+            )
+    outfile.close()
+
+def mk_script(index, n_pro, resub, mpi, openmp, exe):
+    outname = 'rom%3.3d.sh'%(index)
+    sys.stderr.write('Writing script file '+outname+'\n')
+    outfile = open(outname, 'wb')
+    outfile.write(
+        '#! /bin/bash\n'
+        '\n'
+        'set -e\n'
+        '\n'
+        )
+    if mpi:
+        outfile.write(
+            'nice mpirun -np %d %s rom%3.3d.in > rom%3.3d.log\n'
+            %(n_pro,exe,index,index)
+            )
+    elif openmp:
+        outfile.write(
+            'export OMP_NUM_THREADS=%d\n'
+            'nice %s < rom%3.3d.in > rom%3.3d.log\n'
+            %(n_pro,exe,index,index)
+            )
+    else:
+        outfile.write(
+            'nice %s < rom%3.3d.in > rom%3.3d.log\n'
+            %(exe,index,index)
+            )
+    if resub:
+        outfile.write(
+            'source rom%3.3d.sh\n'
+            %(index+1)
+            )
+    outfile.close()
+    os.chmod(outname,0755)
+
+def main():
+    usage = __doc__ + "\n\n  %prog [options]"
+    op = OptionParser(usage=usage)
+    op.add_option("-e", "--executable",
+                  action="store", type="string", dest="exe", default="./ocean", metavar="EXE",
+                  help="Location of ROMS executable")
+    op.add_option("", "--min",
+                  action="store", type="int", dest="min", default=1, metavar="MIN",
+                  help="Minimum index (inclusive) for generated files")
+    op.add_option("", "--max",
+                  action="store", type="int", dest="max", default=1, metavar="MAX",
+                  help="Maximum index (inclusive) for generated files")
+    op.add_option("--ni",
+                  action="store", type="int", dest="ni", default=1, metavar="NI",
+                  help="Number of tiles in I direction")
+    op.add_option("--nj",
+                  action="store", type="int", dest="nj", default=1, metavar="NJ",
+                  help="Number of tiles in J direction")
+    op.add_option("-m", "--mpi",
+                  action="store_true", default=False,
+                  help="Run MPI executable")
+    op.add_option("-o", "--openmp",
+                  action="store_true", default=False,
+                  help="Run OpenMP executable")
+    op.add_option("", "--msub",
+                  action="store_true", default=False,
+                  help="Create MSUB scripts for Moab Workload Manager")
+    op.add_option("", "--llsubmit",
+                  action="store_true", dest="llsub", default=False,
+                  help="Create LoadLeveler scripts for Fitzroy")
+    op.add_option("-q", "--queue",
+                  action="store", type="string", dest="queue", default="",
+                  metavar="QNAME",
+                  help="Queue name, where applicable")
+    op.add_option("-a", "--account",
+                  action="store", type="string", dest="acct", default="",
+                  metavar="ACCOUNT",
+                  help="Account ID, where applicable")
+    op.add_option("-t", "--template",
+                  action="store", type="string", dest="tfile", default="roms.in",
+                  metavar="TFILE",
+                  help="ROMS input template file")
+    op.add_option("-w", "--walltime",
+                  action="store", type="string", dest="wall", default="", metavar="WALL",
+                  help="Wall clock time allocated for job, where applicable")
+    (opts, args) = op.parse_args()
+    if len(args) > 0:
+        sys.exit('This script does not accept positional arguments')
+    try:
+        for index in xrange(opts.min,opts.max+1):
+            mkinput(index, opts.tfile, opts.ni, opts.nj)
+        for index in xrange(opts.min,opts.max+1):
+            if opts.llsub:
+                if not opts.queue:
+                    opts.queue = 'General'
+                if not opts.acct:
+                    # Valid values are: COBR1404, CLCS1402
+                    opts.acct = 'COBR1404'
+                if not opts.wall:
+                    # The default value should depend on the class: see llclass -l.
+                    opts.wall = '24:00:00'
+                mk_llsub(index, opts.ni*opts.nj, index < opts.max, opts.mpi, 
+                         opts.openmp, opts.queue, opts.acct, opts.wall, opts.exe)
+            elif opts.msub:
+                if not opts.queue:
+                    opts.queue = 'medium'
+                if not opts.wall:
+                    opts.wall = '12:00:00'
+                mk_msub(index, opts.ni*opts.nj, index < opts.max, opts.mpi, 
+                        opts.openmp, opts.queue, opts.wall, opts.exe)
+            else:
+                mk_script(index, opts.ni*opts.nj, index < opts.max, opts.mpi,
+                          opts.openmp, opts.exe)
+    except (IOError, OSError), (errno, strerr):
+        sys.exit(strerr)
+
+if __name__ == '__main__':
+    main()
+

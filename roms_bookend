@@ -1,0 +1,64 @@
+#! /usr/bin/env bash
+
+# Script to add "bookend" records at the beginning and end of
+# a ROMS file. This is to be used for (say) the case where we
+# have daily-average climatology or forcing data for one year
+# and we need data to drive a simulation during the first and
+# last 0.5 days of the year.
+
+# Currently there must be an unlimited dimension representing time
+# with units of days.
+
+set -e
+
+# Check arguments. If a second file name is not provided, overwrite
+# the existing file.
+
+if test -n "$1"
+then
+    i=$1
+else
+    echo "Input file name not specified" 1>&2
+    exit 1
+fi
+
+if !(test -f ${i})
+then
+    echo "Input file "${i}" does not exist" 1>&2
+    exit 1
+fi
+
+if test -n "$2"
+then
+    o=$2
+else
+    o=${i}
+fi
+
+# Use ncdump to establish the name of the unlimited dimension & the
+# number of records. For info on shell brace expansions, see
+# http://www.ibm.com/developerworks/library/l-bash.html#N1010B
+
+d=$(ncdump -h ${i} | grep "UNLIMITED ; //" | cut -d " " -f 1)
+d=${d:1}
+
+n=$(ncdump -h ${i} | grep "UNLIMITED ; //" | cut -d " " -f 6)
+n=${n#*(}
+
+# Save the first & last records into separate files and modify their times by
+# -50 and +50 days respectively.
+
+ncks -O -d ${d},0 ${i} ${i}.tmp0
+ncap -O -s "${d}=${d}-50.0" ${i}.tmp0 ${i}.tmp0
+ncatted -O -a units,${d},c,c,days ${i}.tmp0 ${i}.tmp0
+
+ncks -O -d ${d},$((n-1)) ${i} ${i}.tmp1
+ncap -O -s "${d}=${d}+50.0" ${i}.tmp1 ${i}.tmp1
+ncatted -O -a units,${d},c,c,days ${i}.tmp1 ${i}.tmp1
+
+ncrcat -O -o ${o} ${i}.tmp0 ${i} ${i}.tmp1
+
+rm ${i}.tmp0 ${i}.tmp1
+
+
+

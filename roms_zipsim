@@ -1,0 +1,65 @@
+#! /usr/bin/env bash
+
+set -e
+
+# This script archives files used for a ROMS simulation, using the
+# file name conventions specified by the roms_mksim system.
+
+# It accepts a series of simulation iudentifiers; each should be a
+# positive integer that will be zero-padded to 3 digits.
+
+# File name patterns for "find" are:
+#   rom$1.in        ROMS input file
+#   rom$1           Script
+#   rom$1.sh           Script
+#   mrom$1          Msub script
+#   rom$1.msub      Msub script
+#   llrom$1         LoadLeveler script
+#   rom$1.ll        LoadLeveler script
+#   srom$1          Script for serial run (old convention)
+#   srom$1          Script for OpenMP run (old convention)
+#   rom$1.log       Output file
+#   rom$1.err       Error-output file
+#   srom$1.log      Output from serial run (old convention)
+#   srom$1.log      Output from OpenMP run (old convention)
+
+# This script requires Gnu find. Allow the path to this command to be specified
+# via an environment variable.
+
+if test -n "${FIND}"
+then
+  find=${FIND}
+else
+  find=find
+fi
+
+# The interpretation of format strings by the Bash printf
+# built-in seems to vary between platforms. Perhaps this has
+# something to do with the underlying C libraries; perhaps it's
+# just a bug in MINGW
+
+case $(uname -s) in
+  MINGW*)
+    f="%3.0d"
+    ;;
+  *)
+    f="%0.3d"
+    ;;
+esac
+
+for a in "$@"
+do
+
+  s=$(printf ${f} ${a})
+
+  ${find} . -maxdepth 1 \
+            -name rom${s} -o -name rom${s}.sh -o \
+            -name rom${s}.log -o -name rom${s}.err -o \
+            -name rom${s}.'*'.log -o -name rom${s}.'*'.err -o \
+            -name mrom${s} -o -name llrom${s} -o \
+            -name rom${s}.msub -o -name rom${s}.ll -o \
+            -name srom${s} -o -name srom${s}.log -o \
+            -name orom${s} -o -name orom${s}.log -o \
+            -name rom${s}.in | zip -m -@ rom${s}.zip
+
+done
