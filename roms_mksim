@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python2
 
 """Create script and input files for ROMS simulations"""
 
@@ -163,6 +163,80 @@ def mk_llsub(index, n_pro, resub, mpi, openmp, queue, acct, wall, exe):
             )
     outfile.close()
 
+def mk_slurm(index, n_pro, resub, mpi, openmp, queue, acct, wall, exe):
+    outname = 'rom%3.3d.sl'%(index)
+    sys.stderr.write('Writing SLURM script file %s\n'%(outname))
+    outfile = open(outname, 'wb')
+    if mpi:
+        # Some code specific to the Kupe General queue
+        n_node = 1+(n_pro-1)//40
+        if n_pro >= 40:
+            usage = 'exclusive'
+        else:
+            usage = 'share'
+        outfile.write(
+            '#! /bin/bash\n'
+            '#SBATCH --partition=NeSI\n'
+            '#SBATCH --job-name=ocean\n'
+            '#SBATCH --output=rom%3.3d.log\n'
+            '#SBATCH --error=rom%3.3d.err\n'
+            '#SBATCH --nodes=%d\n'
+            '#SBATCH --ntasks=%d\n'
+            '#SBATCH --time=%s\n'
+            '#SBATCH --%s\n'
+            '#SBATCH --hint=nomultithread\n'
+            %(index, index, n_node, n_pro, wall, usage)
+            )
+        outfile.write(
+            'date\n'
+            'srun %s rom%3.3d.in\n'
+            'date\n'
+            %(exe, index)
+            )
+    elif openmp:
+        outfile.write(
+            '#! /bin/bash\n'
+            '#@ job_name         = ocean\n'
+            '#@ output           = rom%3.3d.log\n'
+            '#@ error            = rom%3.3d.err\n'
+            '#@ class            = %s\n'
+            '#@ account_no       = %s\n'
+            '#@ notification     = never\n'
+            '#@ wall_clock_limit = %s\n'
+            '#@ node_usage       = shared\n'
+            '#@ queue\n'
+            '\n'
+            'export OMP_NUM_THREADS=%d\n'
+            'date\n'
+            '%s < rom%3.3d.in\n'
+            'date\n'
+            %(index, index, queue, acct, wall,n_pro, exe, index)
+            )
+    else:
+        outfile.write(
+            '#! /bin/bash\n'
+            '#@ job_name         = ocean\n'
+            '#@ output           = rom%3.3d.log\n'
+            '#@ error            = rom%3.3d.err\n'
+            '#@ class            = %s\n'
+            '#@ account_no       = %s\n'
+            '#@ node_usage       = shared\n'
+            '#@ notification     = never\n'
+            '#@ wall_clock_limit = %s\n'
+            '#@ queue\n'
+            '\n'
+            'date\n'
+            '%s < rom%3.3d.in\n'
+            'date\n'
+            %(index, index, queue, acct, wall, exe, index)
+            )
+    if resub:
+        outfile.write(
+            'sbatch rom%3.3d.sl\n'
+            %(index+1)
+            )
+    outfile.close()
+
 def mk_msub(index, n_pro, resub, mpi, openmp, queue, wall, exe):
     # Make MSUB script for the Turbine cluster, which has 8
     # processors per node
@@ -275,6 +349,9 @@ def main():
     op.add_option("", "--llsubmit",
                   action="store_true", dest="llsub", default=False,
                   help="Create LoadLeveler scripts for Fitzroy")
+    op.add_option("", "--slurm",
+                  action="store_true", dest="slurm", default=False,
+                  help="Create SLURM scripts for Kupe")
     op.add_option("-q", "--queue",
                   action="store", type="string", dest="queue", default="",
                   metavar="QNAME",
@@ -305,9 +382,18 @@ def main():
                     opts.acct = 'COBR1404'
                 if not opts.wall:
                     # The default value should depend on the class: see llclass -l.
-                    opts.wall = '24:00:00'
+                    opts.wall = '12:00:00'
                 mk_llsub(index, opts.ni*opts.nj, index < opts.max, opts.mpi, 
                          opts.openmp, opts.queue, opts.acct, opts.wall, opts.exe)
+            elif opts.slurm:
+                if not opts.queue:
+                    opts.queue = None
+                if not opts.acct:
+                    opts.acct = None
+                if not opts.wall:
+                    opts.wall = '12:00:00'
+                mk_slurm(index, opts.ni*opts.nj, index < opts.max, opts.mpi, 
+                          opts.openmp, opts.queue, opts.acct, opts.wall, opts.exe)
             elif opts.msub:
                 if not opts.queue:
                     opts.queue = 'medium'

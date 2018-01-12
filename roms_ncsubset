@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python2
 
 """Select an areal subset of a ROMS history-type"""
 
@@ -9,10 +9,7 @@ import sys
 import os
 import subprocess
 
-try:
-    from optparse import OptionParser
-except:
-    from optik import OptionParser
+from optparse import OptionParser
 
 def outname(file_in, xi_range, eta_range):
     if xi_range:

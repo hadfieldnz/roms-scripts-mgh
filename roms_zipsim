@@ -11,11 +11,12 @@ set -e
 # File name patterns for "find" are:
 #   rom$1.in        ROMS input file
 #   rom$1           Script
-#   rom$1.sh           Script
+#   rom$1.sh        Script
 #   mrom$1          Msub script
 #   rom$1.msub      Msub script
 #   llrom$1         LoadLeveler script
 #   rom$1.ll        LoadLeveler script
+#   rom$1.sl        SLURN script
 #   srom$1          Script for serial run (old convention)
 #   srom$1          Script for OpenMP run (old convention)
 #   rom$1.log       Output file
@@ -57,7 +58,7 @@ do
             -name rom${s}.log -o -name rom${s}.err -o \
             -name rom${s}.'*'.log -o -name rom${s}.'*'.err -o \
             -name mrom${s} -o -name llrom${s} -o \
-            -name rom${s}.msub -o -name rom${s}.ll -o \
+            -name rom${s}.msub -o -name rom${s}.ll -o -name rom${s}.sl -o \
             -name srom${s} -o -name srom${s}.log -o \
             -name orom${s} -o -name orom${s}.log -o \
             -name rom${s}.in | zip -m -@ rom${s}.zip
