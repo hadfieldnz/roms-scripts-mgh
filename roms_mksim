@@ -43,7 +43,7 @@
 #     existing settings and added MP_TIMEOUT=300 to work around a delay in
 #     setting up process on Fitzroy.
 #   - Added calls to data before & after invoking ROMS in Loadleveler scripts.
-#   - Names of script files changed to rom???.ll (Loadleveler), rom???.msub (Msub)
+#   - Names of script files changed to rom???.ll (Loadleveler), rom???.msub (Moab)
 #     and rom???.sh (shell script).
 # MGH 2014-06-30
 #   - Default account now COBR1404.
@@ -54,6 +54,7 @@
 #   - Implemented SLURM scripts, so far only for MPI
 # MGH 2018-01-12
 #   - Implemented SLURM scripts for serial and OpenMP
+#   - Removed Moab support
 
 from __future__ import division
 
@@ -244,54 +245,6 @@ def mk_slurm(index, n_pro, resub, mpi, openmp, queue, acct, wall, exe):
             )
     outfile.close()
 
-def mk_msub(index, n_pro, resub, mpi, openmp, queue, wall, exe):
-    # Make MSUB script for the Turbine cluster, which has 8
-    # processors per node
-    outname = 'rom%3.3d.msub'%(index)
-    sys.stderr.write('Writing MSUB script file '+outname+'\n')
-    outfile = open(outname, 'wb')
-    if mpi:
-        outfile.write(
-            '#MSUB -S /bin/bash\n'
-            '#MSUB -v LD_LIBRARY_PATH\n'
-            '#MSUB -q %s\n'
-            '#MSUB -l walltime=%s\n'
-            '#MSUB -l nodes=%d\n'
-            '\n'
-            'mpirun -np %d %s rom%3.3d.in > rom%3.3d.log\n'
-            %(queue,wall,n_pro,n_pro,exe,index,index)
-            )
-    elif openmp:
-        ppn=min(n_pro,8)
-        outfile.write(
-            '#MSUB -S /bin/bash\n'
-            '#MSUB -v LD_LIBRARY_PATH\n'
-            '#MSUB -q %s\n'
-            '#MSUB -l walltime=%s\n'
-            '#MSUB -l nodes=%d\n'
-            '\n'
-            'export OMP_NUM_THREADS=%d\n'
-            '%s < rom%3.3d.in > rom%3.3d.log\n'
-            %(queue,wall,n_pro,n_pro,exe,index,index)
-            )
-    else:
-        outfile.write(
-            '#MSUB -S /bin/bash\n'
-            '#MSUB -v LD_LIBRARY_PATH,OMP_NUM_THREADS\n'
-            '#MSUB -q %s\n'
-            '#MSUB -l walltime=%s\n'
-            '#MSUB -l nodes=1\n'
-            '\n'
-            '%s < rom%3.3d.in > rom%3.3d.log\n'
-            %(queue,wall,exe,index,index)
-            )
-    if resub:
-        outfile.write(
-            'msub rom%3.3d.msub\n'
-            %(index+1)
-            )
-    outfile.close()
-
 def mk_script(index, n_pro, resub, mpi, openmp, exe):
     outname = 'rom%3.3d.sh'%(index)
     sys.stderr.write('Writing script file '+outname+'\n')
@@ -350,9 +303,6 @@ def main():
     op.add_option("-o", "--openmp",
                   action="store_true", default=False,
                   help="Run OpenMP executable")
-    op.add_option("", "--msub",
-                  action="store_true", default=False,
-                  help="Create MSUB scripts for Moab Workload Manager")
     op.add_option("", "--llsubmit",
                   action="store_true", dest="llsub", default=False,
                   help="Create LoadLeveler scripts for Fitzroy")
@@ -401,13 +351,6 @@ def main():
                     opts.wall = '12:00:00'
                 mk_slurm(index, opts.ni*opts.nj, index < opts.max, opts.mpi,
                           opts.openmp, opts.queue, opts.acct, opts.wall, opts.exe)
-            elif opts.msub:
-                if not opts.queue:
-                    opts.queue = 'medium'
-                if not opts.wall:
-                    opts.wall = '12:00:00'
-                mk_msub(index, opts.ni*opts.nj, index < opts.max, opts.mpi,
-                        opts.openmp, opts.queue, opts.wall, opts.exe)
             else:
                 mk_script(index, opts.ni*opts.nj, index < opts.max, opts.mpi,
                           opts.openmp, opts.exe)
