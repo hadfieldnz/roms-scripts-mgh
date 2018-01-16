@@ -50,6 +50,10 @@
 # MGH 2015-08-12
 #   - For Loadleveler jobs, added network.MPI directive to run on Infiniband.
 #   - Fixed up indentation problems caused by tab->space conversion.
+# MGH 2018-01-12
+#   - Implemented SLURM scripts, so far only for MPI
+# MGH 2018-01-12
+#   - Implemented SLURM scripts for serial and OpenMP
 
 from __future__ import division
 
@@ -58,10 +62,7 @@ import os
 import re
 import math
 
-try:
-    from optparse import OptionParser
-except:
-    from optik import OptionParser
+from optparse import OptionParser
 
 p = re.compile('<<|>>')
 
@@ -116,7 +117,7 @@ def mk_llsub(index, n_pro, resub, mpi, openmp, queue, acct, wall, exe):
             'date\n'
             'poe %s rom%3.3d.in\n'
             'date\n'
-            %(index, index, queue, acct, n_pro, n_node, wall, usage, exe, 
+            %(index, index, queue, acct, n_pro, n_node, wall, usage, exe,
               index)
             )
     elif openmp:
@@ -196,39 +197,45 @@ def mk_slurm(index, n_pro, resub, mpi, openmp, queue, acct, wall, exe):
     elif openmp:
         outfile.write(
             '#! /bin/bash\n'
-            '#@ job_name         = ocean\n'
-            '#@ output           = rom%3.3d.log\n'
-            '#@ error            = rom%3.3d.err\n'
-            '#@ class            = %s\n'
-            '#@ account_no       = %s\n'
-            '#@ notification     = never\n'
-            '#@ wall_clock_limit = %s\n'
-            '#@ node_usage       = shared\n'
-            '#@ queue\n'
-            '\n'
+            '#SBATCH --partition=NeSI\n'
+            '#SBATCH --job-name=ocean\n'
+            '#SBATCH --output=rom%3.3d.log\n'
+            '#SBATCH --error=rom%3.3d.err\n'
+            '#SBATCH --nodes=1\n'
+            '#SBATCH --ntasks=1\n'
+            '#SBATCH --cpus-per-task=%d\n'
+            '#SBATCH --time=%s\n'
+            '#SBATCH --share\n'
+            '#SBATCH --hint=nomultithread\n'
+            %(index, index, n_pro, wall)
+            )
+        outfile.write(
             'export OMP_NUM_THREADS=%d\n'
             'date\n'
             '%s < rom%3.3d.in\n'
             'date\n'
-            %(index, index, queue, acct, wall,n_pro, exe, index)
+            %(n_pro, exe, index)
             )
     else:
         outfile.write(
             '#! /bin/bash\n'
-            '#@ job_name         = ocean\n'
-            '#@ output           = rom%3.3d.log\n'
-            '#@ error            = rom%3.3d.err\n'
-            '#@ class            = %s\n'
-            '#@ account_no       = %s\n'
-            '#@ node_usage       = shared\n'
-            '#@ notification     = never\n'
-            '#@ wall_clock_limit = %s\n'
-            '#@ queue\n'
-            '\n'
+            '#SBATCH --partition=NeSI\n'
+            '#SBATCH --job-name=ocean\n'
+            '#SBATCH --output=rom%3.3d.log\n'
+            '#SBATCH --error=rom%3.3d.err\n'
+            '#SBATCH --nodes=1\n'
+            '#SBATCH --ntasks=1\n'
+            '#SBATCH --cpus-per-task=1\n'
+            '#SBATCH --time=%s\n'
+            '#SBATCH --share\n'
+            '#SBATCH --hint=nomultithread\n'
+            %(index, index, wall)
+            )
+        outfile.write(
             'date\n'
             '%s < rom%3.3d.in\n'
             'date\n'
-            %(index, index, queue, acct, wall, exe, index)
+            %(exe, index)
             )
     if resub:
         outfile.write(
@@ -383,7 +390,7 @@ def main():
                 if not opts.wall:
                     # The default value should depend on the class: see llclass -l.
                     opts.wall = '12:00:00'
-                mk_llsub(index, opts.ni*opts.nj, index < opts.max, opts.mpi, 
+                mk_llsub(index, opts.ni*opts.nj, index < opts.max, opts.mpi,
                          opts.openmp, opts.queue, opts.acct, opts.wall, opts.exe)
             elif opts.slurm:
                 if not opts.queue:
@@ -392,14 +399,14 @@ def main():
                     opts.acct = None
                 if not opts.wall:
                     opts.wall = '12:00:00'
-                mk_slurm(index, opts.ni*opts.nj, index < opts.max, opts.mpi, 
+                mk_slurm(index, opts.ni*opts.nj, index < opts.max, opts.mpi,
                           opts.openmp, opts.queue, opts.acct, opts.wall, opts.exe)
             elif opts.msub:
                 if not opts.queue:
                     opts.queue = 'medium'
                 if not opts.wall:
                     opts.wall = '12:00:00'
-                mk_msub(index, opts.ni*opts.nj, index < opts.max, opts.mpi, 
+                mk_msub(index, opts.ni*opts.nj, index < opts.max, opts.mpi,
                         opts.openmp, opts.queue, opts.wall, opts.exe)
             else:
                 mk_script(index, opts.ni*opts.nj, index < opts.max, opts.mpi,
