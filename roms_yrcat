@@ -1,4 +1,4 @@
-#! /usr/bin/env python2
+#! /usr/bin/env python3
 
 """\
 Ryrcat works on a series of ROMS-output netCDF files that are assumed to
@@ -6,6 +6,12 @@ contain 5-day average data for one or more 365-day years (but not normally
 with one file per year). For each year specified as a command-line argument,
 it extracts the records for that year and writes them to a netCDF output file.
 """
+
+# MGH ????
+#   - Written
+# MGH 2018-01-01
+#   - Converted to Python 3
+
 import sys
 import os
 import glob
@@ -39,7 +45,7 @@ def main():
     try:
         infiles = glob.glob(opts.iptn)
         if not infiles:
-            raise IOError, (1, 'No match for input pattern')
+            raise IOError(1, 'No match for input pattern')
         infiles.sort()
         for a in args:
             outfile = opts.ofmt%(long(a))
@@ -52,8 +58,9 @@ def main():
                       " -o %s %s"%(tr0,tr1,outfile,' '.join(infiles))
             status = os.system(cmd)
             if status:
-                raise IOError, (status, 'Command failed: '+cmd)
-    except (IOError, OSError), (errno, strerr):
+                raise IOError(status, 'Command failed: '+cmd)
+    except OSError as err:
+        _, strerr = err.args
         sys.exit(strerr)
 
 if __name__ == '__main__':

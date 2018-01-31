@@ -1,9 +1,11 @@
-#! /usr/bin/env python2
+#! /usr/bin/env python3
 
 """Select an areal subset of a ROMS history-type"""
 
 # MGH 2014-08-08
 #   - Written
+# MGH 2018-01-01
+#   - Converted to Python 3
 
 import sys
 import os
@@ -93,7 +95,8 @@ def main():
         if not file_out:
             file_out = outname(file_in, xi_range, eta_range)
         process(file_in, file_out, xi_range, eta_range, opts.overwrite)
-    except (IOError, OSError), (errno, strerr):
+    except OSError as err:
+        _, strerr = err.args
         sys.exit(strerr)
 
 if __name__ == '__main__':

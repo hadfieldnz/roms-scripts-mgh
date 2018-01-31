@@ -1,4 +1,4 @@
-#! /usr/bin/env python2
+#! /usr/bin/env python3
 
 """Create script and input files for ROMS simulations"""
 
@@ -55,6 +55,8 @@
 # MGH 2018-01-12
 #   - Implemented SLURM scripts for serial and OpenMP
 #   - Removed Moab support
+# MGH 2018-02-01
+#   - Converted to python3
 
 from __future__ import division
 
@@ -277,7 +279,7 @@ def mk_script(index, n_pro, resub, mpi, openmp, exe):
             %(index+1)
             )
     outfile.close()
-    os.chmod(outname,0755)
+    os.chmod(outname,0o755)
 
 def main():
     usage = __doc__ + "\n\n  %prog [options]"
@@ -354,9 +356,9 @@ def main():
             else:
                 mk_script(index, opts.ni*opts.nj, index < opts.max, opts.mpi,
                           opts.openmp, opts.exe)
-    except (IOError, OSError), (errno, strerr):
+    except OSError as err:
+        _, strerr = err.args
         sys.exit(strerr)
 
 if __name__ == '__main__':
     main()
-

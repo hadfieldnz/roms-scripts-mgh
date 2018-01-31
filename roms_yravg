@@ -1,4 +1,4 @@
-#! /usr/bin/env python2
+#! /usr/bin/env python3
 
 """\
 Ryravg works on a series of ROMS-output netCDF files that are assumed to
@@ -7,6 +7,12 @@ with one file per year). For each year specified as a command-line argument,
 it extracts and averages the records for that year and writes the average
 to a netCDF output file.
 """
+
+# MGH ????
+#   - Written
+# MGH 2018-01-01
+#   - Converted to Python 3
+
 import sys
 import os
 import glob
@@ -52,7 +58,8 @@ def main():
             cmd = cmd+" -d ocean_time,%.1f,%.1f" \
                       " -o %s %s"%(tr0,tr1,outfile,' '.join(infiles))
             os.system(cmd)
-    except (IOError, OSError), (errno, strerr):
+    except OSError as err:
+        _, strerr = err.args
         sys.exit(strerr)
 
 if __name__ == '__main__':
