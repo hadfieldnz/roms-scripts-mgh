@@ -57,8 +57,8 @@
 #   - Removed Moab support
 # MGH 2018-02-01
 #   - Converted to python3
-
-from __future__ import division
+# MGH 2018-02-02
+#   - Fixed several python3 porting bugs.
 
 import sys
 import os
@@ -73,8 +73,8 @@ def mkinput(index, tfile, ni, nj):
     infile = open(tfile,'r')
     outname = 'rom%3.3d.in'%(index)
     sys.stderr.write('Writing ROMS input file '+outname+'\n')
-    outfile = open(outname, 'wb')
-    for line in infile.xreadlines():
+    outfile = open(outname, 'w')
+    for line in infile.readlines():
         if not line.startswith("!"):
             # Split the line with the pre-compiled regular
             # expression. This results in a list in which every second
@@ -91,7 +91,7 @@ def mkinput(index, tfile, ni, nj):
 def mk_llsub(index, n_pro, resub, mpi, openmp, queue, acct, wall, exe):
     outname = 'rom%3.3d.ll'%(index)
     sys.stderr.write('Writing LoadLeveler script file %s\n'%(outname))
-    outfile = open(outname, 'wb')
+    outfile = open(outname, 'w')
     if mpi:
         # Some Fitzroy-specific code
         n_node = 1+(n_pro-1)//64
@@ -170,7 +170,7 @@ def mk_llsub(index, n_pro, resub, mpi, openmp, queue, acct, wall, exe):
 def mk_slurm(index, n_pro, resub, mpi, openmp, queue, acct, wall, exe):
     outname = 'rom%3.3d.sl'%(index)
     sys.stderr.write('Writing SLURM script file %s\n'%(outname))
-    outfile = open(outname, 'wb')
+    outfile = open(outname, 'w')
     if mpi:
         # Some code specific to the Kupe General queue
         n_node = 1+(n_pro-1)//40
@@ -250,7 +250,7 @@ def mk_slurm(index, n_pro, resub, mpi, openmp, queue, acct, wall, exe):
 def mk_script(index, n_pro, resub, mpi, openmp, exe):
     outname = 'rom%3.3d.sh'%(index)
     sys.stderr.write('Writing script file '+outname+'\n')
-    outfile = open(outname, 'wb')
+    outfile = open(outname, 'w')
     outfile.write(
         '#! /bin/bash\n'
         '\n'
@@ -330,9 +330,9 @@ def main():
     if len(args) > 0:
         sys.exit('This script does not accept positional arguments')
     try:
-        for index in xrange(opts.min,opts.max+1):
+        for index in range(opts.min,opts.max+1):
             mkinput(index, opts.tfile, opts.ni, opts.nj)
-        for index in xrange(opts.min,opts.max+1):
+        for index in range(opts.min,opts.max+1):
             if opts.llsub:
                 if not opts.queue:
                     opts.queue = 'General'
