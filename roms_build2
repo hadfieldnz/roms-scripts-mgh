@@ -49,7 +49,7 @@ echo The executable will be copied to ${exe_dir}
 
 if test -z "${scratch_dir}"
 then
-  scratch_dir=${PWD}/Build-$(uname -s -m | tr " " "-")-$(basename ${FORT})
+  scratch_dir=$(roms_bldir)/Build-$(uname -s -m | tr " " "-")-$(basename ${FORT})
 
 fi
 
@@ -81,13 +81,13 @@ fi
 
 if test -n "${MY_HEADER_DIR}"
 then
-  echo ROMS application is ${MY_HEADER_DIR}
+  echo ROMS header directlory is ${MY_HEADER_DIR}
 fi
 
 
 if test -n "${MY_ANALYTICAL_DIR}"
 then
-  echo ROMS application is ${MY_ANALYTICAL_DIR}
+  echo ROMS analytical directory is ${MY_ANALYTICAL_DIR}
 fi
 
 # Move to source directory
@@ -117,13 +117,10 @@ if test -n "${use_omp}"
 then
   make_args=${make_args}" -o"
 fi
-roms_make ${make_args} ROMS_APPLICATION=${ROMS_APPLICATION} SCRATCH_DIR=${scratch_dir}
+make ${make_args} ROMS_APPLICATION=${ROMS_APPLICATION} SCRATCH_DIR=${scratch_dir}
 
 # The roms_make command, if successful, will have made an executable
-# in the scratch subdirectory. Get the directory name by calling
-# roms_make with the "-d" switch and work out the executable name
-
-scratch_dir=$(roms_make -d ${make_args})
+# in the scratch subdirectory.
 
 if test -n "${use_debug}"
 then
@@ -161,5 +158,5 @@ case $(uname -s) in
     suffix=.exe
 esac
 
-${cp} -v -f ${bld_dir}/${ocean_exe}${suffix} ${exe_dir}/ocean
+cp -v -f ${ocean_exe}${suffix} ${exe_dir}/ocean
 
