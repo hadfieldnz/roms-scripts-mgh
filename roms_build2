@@ -1,0 +1,165 @@
+#! /usr/bin/env bash
+
+# This is the successor to the roms_build script, more similar in operation
+# to the build.bash scripts provided with ROMS. The only functionality
+# from roms_build that has been sacrificed is the ability to combine
+# multiple source trees.
+
+# MGH 2018-02-08
+#   Written
+
+set -e
+
+# Process arguments
+
+while getopts "e:gmos:" opt
+do
+  case "${opt}" in
+    e)
+      exe_dir=${OPTARG}
+      ;;
+    g)
+      use_debug=1
+      ;;
+    m)
+      use_mpi=1
+      ;;
+    o)
+      use_omp=1
+      ;;
+    s)
+      scratch_dir=${OPTARG}
+      ;;
+  esac
+done
+shift $(( ${OPTIND}-1 ))
+
+if test -n "${1}"
+then
+  echo Positional arguments are not permitted
+  exit 1
+fi
+
+if test -z "${exe_dir}"
+then
+  exe_dir=${PWD}
+fi
+
+echo The executable will be copied to ${exe_dir}
+
+if test -z "${scratch_dir}"
+then
+  scratch_dir=${PWD}/Build-$(uname -s -m | tr " " "-")-$(basename ${FORT})
+
+fi
+
+echo ROMS will be built in ${scratch_dir}
+
+# File "build2_parameters" in the current directory must contain code
+# to specify the ROMS_SRC & ROMS_APPLICATION variables. It will
+# normally contain other environmental variables, notably
+# MY_HEADER_DIR and MY_ANALYTICAL_DIR
+
+source ./build2_parameters
+
+if test -n "${ROMS_SRC}"
+then
+  echo ROMS source path is ${ROMS_SRC}
+else
+  echo "ROMS_SRC has not been set" 1>&2
+  exit 1
+fi
+
+if test -n "${ROMS_APPLICATION}"
+then
+  echo ROMS application is ${ROMS_APPLICATION}
+else
+  echo "ROMS_APPLICATION has not been set" 1>&2
+  exit 1
+fi
+
+
+if test -n "${MY_HEADER_DIR}"
+then
+  echo ROMS application is ${MY_HEADER_DIR}
+fi
+
+
+if test -n "${MY_ANALYTICAL_DIR}"
+then
+  echo ROMS application is ${MY_ANALYTICAL_DIR}
+fi
+
+# Move to source directory
+
+cd ${ROMS_SRC}
+
+# Test for the presence of a makefile.
+
+if !(test -f makefile)
+then
+  echo "No makefile" 1>&2
+  exit 1
+fi
+
+# Make binary with roms_make
+
+make_args=""
+if test -n "${use_debug}"
+then
+  make_args=${make_args}" -g"
+fi
+if test -n "${use_mpi}"
+then
+  make_args=${make_args}" -m"
+fi
+if test -n "${use_omp}"
+then
+  make_args=${make_args}" -o"
+fi
+roms_make ${make_args} ROMS_APPLICATION=${ROMS_APPLICATION} SCRATCH_DIR=${scratch_dir}
+
+# The roms_make command, if successful, will have made an executable
+# in the scratch subdirectory. Get the directory name by calling
+# roms_make with the "-d" switch and work out the executable name
+
+scratch_dir=$(roms_make -d ${make_args})
+
+if test -n "${use_debug}"
+then
+    ocean_exe=${scratch_dir}/oceanG
+else
+  if test -n "${use_mpi}"
+  then
+    ocean_exe=${scratch_dir}/oceanM
+  else
+    if test -n "${use_omp}"
+    then
+      ocean_exe=${scratch_dir}/oceanO
+    else
+      ocean_exe=${scratch_dir}/oceanS
+    fi
+  fi
+fi
+
+# Return to the original working directory and make a copy of the
+# executable there. For simplicity in calling it, and to avoid
+# confusion between different executables in the same directory, give
+# it the name "ocean".  On the Windows-hosted systems, Cygwin and
+# MSYS/MinGW, the linker will have created an executable with the
+# suffix ".exe". However this suffix is not needed by the bash shell.
+
+echo Copying executable
+
+if !(test -d ${exe_dir})
+then
+  mkdir -p ${exe_dir}
+fi
+
+case $(uname -s) in
+  MINGW* | CYGWIN*)
+    suffix=.exe
+esac
+
+${cp} -v -f ${bld_dir}/${ocean_exe}${suffix} ${exe_dir}/ocean
+
