@@ -102,7 +102,7 @@ then
   exit 1
 fi
 
-# Make binary with roms_make
+# Make binary
 
 make_args=""
 if test -n "${use_debug}"
@@ -117,46 +117,5 @@ if test -n "${use_omp}"
 then
   make_args=${make_args}" -o"
 fi
-make ${make_args} ROMS_APPLICATION=${ROMS_APPLICATION} SCRATCH_DIR=${scratch_dir}
-
-# The roms_make command, if successful, will have made an executable
-# in the scratch subdirectory.
-
-if test -n "${use_debug}"
-then
-    ocean_exe=${scratch_dir}/oceanG
-else
-  if test -n "${use_mpi}"
-  then
-    ocean_exe=${scratch_dir}/oceanM
-  else
-    if test -n "${use_omp}"
-    then
-      ocean_exe=${scratch_dir}/oceanO
-    else
-      ocean_exe=${scratch_dir}/oceanS
-    fi
-  fi
-fi
-
-# Return to the original working directory and make a copy of the
-# executable there. For simplicity in calling it, and to avoid
-# confusion between different executables in the same directory, give
-# it the name "ocean".  On the Windows-hosted systems, Cygwin and
-# MSYS/MinGW, the linker will have created an executable with the
-# suffix ".exe". However this suffix is not needed by the bash shell.
-
-echo Copying executable
-
-if !(test -d ${exe_dir})
-then
-  mkdir -p ${exe_dir}
-fi
-
-case $(uname -s) in
-  MINGW* | CYGWIN*)
-    suffix=.exe
-esac
-
-cp -v -f ${ocean_exe}${suffix} ${exe_dir}/ocean
+make ${make_args} ROMS_APPLICATION=${ROMS_APPLICATION} SCRATCH_DIR=${scratch_dir} BIN=${exe_dir}/ocean
 
