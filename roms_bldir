@@ -2,7 +2,8 @@
 
 set -e
 
-# Print the name of a temporary directory in which to build ROMS
+# Print the name of a temporary directory in which to build ROMS.
+# The directory name encodes the current working directory.
 
 if test -n "${1}"
 then
@@ -15,15 +16,6 @@ then
   ROMS_TMP=/tmp/${USER}
 fi
 
-if test -z "${PLATFORM}"
-then
-  PLATFORM=$(uname -s | cut -d "_" -f 1)-$(uname -m)
-fi
-
-# To keep the temporary directory name short, replace the full name of the
-# current directory with its MD5 sum.
-
-result=${ROMS_TMP}/roms_bld_$(uname -s -m | tr " " "-")
-result=${result}_$(pwd | md5sum - | cut -d " " -f 1)
+result=${ROMS_TMP}/roms_bld_$(pwd | md5sum - | cut -d " " -f 1)
 
 echo ${result}

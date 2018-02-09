@@ -2,11 +2,13 @@
 
 # This is the successor to the roms_build script, more similar in operation
 # to the build.bash scripts provided with ROMS. The only functionality
-# from roms_build that has been sacrificed is the ability to combine
+# from the old roms_build that has been sacrificed is the ability to combine
 # multiple source trees.
 
 # MGH 2018-02-08
-#   Written
+#   Written as roms_build2
+# MGH 2018-02-0
+#   Renamed roms_build, replacing the old script.
 
 set -e
 
@@ -50,17 +52,16 @@ echo The executable will be copied to ${exe_dir}
 if test -z "${scratch_dir}"
 then
   scratch_dir=$(roms_bldir)/Build-$(uname -s -m | tr " " "-")-$(basename ${FORT})
-
 fi
 
 echo ROMS will be built in ${scratch_dir}
 
-# File "build2_parameters" in the current directory must contain code
-# to specify the ROMS_SRC & ROMS_APPLICATION variables. It will
+# File "build_parameters" in the current directory must contain code
+# to specify the ROMS_SRCPATH & ROMS_APPLICATION variables. It will
 # normally contain other environmental variables, notably
 # MY_HEADER_DIR and MY_ANALYTICAL_DIR
 
-source ./build2_parameters
+source ./build_parameters
 
 if test -n "${ROMS_SRC}"
 then
@@ -102,20 +103,30 @@ then
   exit 1
 fi
 
-# Make binary
+# Make executable
 
 make_args=""
 if test -n "${use_debug}"
 then
-  make_args=${make_args}" -g"
+  make_args=${make_args}" DEBUG=on USE_DEBUG=on"
+  scratch_dir=${scratch_dir}-debug
 fi
 if test -n "${use_mpi}"
 then
-  make_args=${make_args}" -m"
+  make_args=${make_args}" MPI=on USE_MPI=on"
+  scratch_dir=${scratch_dir}-MPI
 fi
 if test -n "${use_omp}"
 then
-  make_args=${make_args}" -o"
+  make_args=${make_args}" OpenMP=on USE_OpenMP=on"
+  scratch_dir=${scratch_dir}-OpenMP
 fi
-make ${make_args} ROMS_APPLICATION=${ROMS_APPLICATION} SCRATCH_DIR=${scratch_dir} BIN=${exe_dir}/ocean
+make ${make_args} ROMS_APPLICATION=${ROMS_APPLICATION} SCRATCH_DIR=${scratch_dir} BIN=${scratch_dir}/ocean
 
+# Copy executable to the appropriate directory
+
+if (test -f ${scratch_dir}/ocean)
+then
+  echo "Copying executable to ${exe_dir}"
+  cp -vf ${scratch_dir}/ocean ${exe_dir}
+fi
