@@ -63,11 +63,11 @@ echo ROMS will be built in ${scratch_dir}
 
 source ./build_parameters
 
-if test -n "${ROMS_SRC}"
+if test -n "${ROMS_SRCPATH}"
 then
-  echo ROMS source path is ${ROMS_SRC}
+  echo ROMS source path is ${ROMS_SRCPATH}
 else
-  echo "ROMS_SRC has not been set" 1>&2
+  echo "ROMS_SRCPATH has not been set" 1>&2
   exit 1
 fi
 
@@ -93,7 +93,7 @@ fi
 
 # Move to source directory
 
-cd ${ROMS_SRC}
+cd ${ROMS_SRCPATH}
 
 # Test for the presence of a makefile.
 
