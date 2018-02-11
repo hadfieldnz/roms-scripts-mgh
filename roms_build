@@ -6,9 +6,14 @@
 # multiple source trees.
 
 # MGH 2018-02-08
-#   Written as roms_build2
-# MGH 2018-02-0
-#   Renamed roms_build, replacing the old script.
+#   - Written as roms_build2
+# MGH 2018-02-09
+#   - Renamed roms_build, replacing the old script.
+# MGH 2018-02-12
+#   - The ROMS source location variable is now named MY_ROMS_SRC, as in ROMS
+#     build.bash files. This eliminates the risk of inadvertently processing
+#     old-style build_parameters files.
+#   - Positional arguments are now allowed and are passed to make.
 
 set -e
 
@@ -36,11 +41,12 @@ do
 done
 shift $(( ${OPTIND}-1 ))
 
-if test -n "${1}"
+if test -z "${scratch_dir}"
 then
-  echo Positional arguments are not permitted
-  exit 1
+  scratch_dir=$(roms_bldir)/Build-$(uname -s -m | tr " " "-")-$(basename ${FORT})
 fi
+
+echo ROMS will be built in ${scratch_dir}
 
 if test -z "${exe_dir}"
 then
@@ -49,25 +55,18 @@ fi
 
 echo The executable will be copied to ${exe_dir}
 
-if test -z "${scratch_dir}"
-then
-  scratch_dir=$(roms_bldir)/Build-$(uname -s -m | tr " " "-")-$(basename ${FORT})
-fi
-
-echo ROMS will be built in ${scratch_dir}
-
 # File "build_parameters" in the current directory must contain code
-# to specify the ROMS_SRCPATH & ROMS_APPLICATION variables. It will
+# to specify the ROMS_APPLICATION & MY_ROMS_SRC variables. It will
 # normally contain other environmental variables, notably
 # MY_HEADER_DIR and MY_ANALYTICAL_DIR
 
 source ./build_parameters
 
-if test -n "${ROMS_SRCPATH}"
+if test -n "${MY_ROMS_SRC}"
 then
-  echo ROMS source path is ${ROMS_SRCPATH}
+  echo ROMS source path is ${MY_ROMS_SRC}
 else
-  echo "ROMS_SRCPATH has not been set" 1>&2
+  echo "MY_ROMS_SRC has not been set" 1>&2
   exit 1
 fi
 
@@ -93,7 +92,7 @@ fi
 
 # Move to source directory
 
-cd ${ROMS_SRCPATH}
+cd ${MY_ROMS_SRC}
 
 # Test for the presence of a makefile.
 
@@ -121,7 +120,7 @@ then
   make_args=${make_args}" OpenMP=on USE_OpenMP=on"
   scratch_dir=${scratch_dir}-OpenMP
 fi
-make ${make_args} ROMS_APPLICATION=${ROMS_APPLICATION} SCRATCH_DIR=${scratch_dir} BIN=${scratch_dir}/ocean
+make ${make_args} ROMS_APPLICATION=${ROMS_APPLICATION} SCRATCH_DIR=${scratch_dir} BIN=${scratch_dir}/ocean "$@"
 
 # Copy executable to the appropriate directory
 
