@@ -5,7 +5,7 @@ set -e
 # This script archives files used for a ROMS simulation, using the
 # file name conventions specified by the roms_mksim system.
 
-# It accepts a series of simulation iudentifiers; each should be a
+# It accepts a series of simulation identifiers; each should be a
 # positive integer that will be zero-padded to 3 digits.
 
 # File name patterns for "find" are:
@@ -23,6 +23,26 @@ set -e
 #   rom$1.err       Error-output file
 #   srom$1.log      Output from serial run (old convention)
 #   srom$1.log      Output from OpenMP run (old convention)
+
+set -e
+
+# Process keyword arguments
+
+while getopts "l:t" opt
+do
+  case "${opt}" in
+    l)
+      # Include a label in the output file name.
+      label=${OPTARG}
+      ;;
+    t)
+      # Include a time stamp in the output file name. The timestamp
+      # is evaluated only once in this script.
+      timestamp=$(date +%Y%m%d%H%M%S)
+      ;;
+  esac
+done
+shift $(( ${OPTIND}-1 ))
 
 # This script requires Gnu find. Allow the path to this command to be specified
 # via an environment variable.
@@ -48,10 +68,25 @@ case $(uname -s) in
     ;;
 esac
 
+# Work through the simulkation identifiers (positional arguments)
+# building up the respective ZIP files
+
 for a in "$@"
 do
 
   s=$(printf ${f} ${a})
+  
+  zipname=rom${s}
+  if test -n "${label}"
+  then
+    zipname=${zipname}-${label}
+  fi
+  if test -n "${timestamp}"
+  then
+    zipname=${zipname}-${timestamp}
+  fi
+
+  zipname=${zipname}.zip
 
   ${find} . -maxdepth 1 \
             -name rom${s} -o -name rom${s}.sh -o \
@@ -61,6 +96,6 @@ do
             -name rom${s}.msub -o -name rom${s}.ll -o -name rom${s}.sl -o \
             -name srom${s} -o -name srom${s}.log -o \
             -name orom${s} -o -name orom${s}.log -o \
-            -name rom${s}.in | zip -m -@ rom${s}.zip
+            -name rom${s}.in | zip -m -@ ${zipname}
 
 done
