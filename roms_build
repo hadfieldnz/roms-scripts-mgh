@@ -8,20 +8,27 @@
 # MGH 2018-02-08
 #   - Written as roms_build2
 # MGH 2018-02-09
-#   - Renamed roms_build, replacing the old script.
+#   - Renamed this script to roms_build, replacing the old script of the same
+#     name
 # MGH 2018-02-12
 #   - The ROMS source location variable is now named MY_ROMS_SRC, as in ROMS
 #     build.bash files. This eliminates the risk of inadvertently processing
 #     old-style build_parameters files.
 #   - Positional arguments are now allowed and are passed to make.
+# MGH 2018-02-14
+#   - The name of the "build parameters" file can now be set via the command
+#     line. The default is .build_env.
 
 set -e
 
 # Process arguments
 
-while getopts "e:gmos:" opt
+while getopts "b:e:gmos:" opt
 do
   case "${opt}" in
+    b)
+      build_env=${OPTARG}
+      ;;
     e)
       exe_dir=${OPTARG}
       ;;
@@ -41,26 +48,29 @@ do
 done
 shift $(( ${OPTIND}-1 ))
 
+if test -z "${build_env}"
+then
+  build_env=.build_env
+fi
+echo The build environment file is ${build_env}
+
 if test -z "${scratch_dir}"
 then
   scratch_dir=$(roms_bldir)/Build-$(uname -s -m | tr " " "-")-$(basename ${FORT})
 fi
-
 echo ROMS will be built in ${scratch_dir}
 
 if test -z "${exe_dir}"
 then
   exe_dir=${PWD}
 fi
-
 echo The executable will be copied to ${exe_dir}
 
-# File "build_parameters" in the current directory must contain code
-# to specify the ROMS_APPLICATION & MY_ROMS_SRC variables. It will
-# normally contain other environmental variables, notably
-# MY_HEADER_DIR and MY_ANALYTICAL_DIR
+# File build environment file in the current directory must contain code
+# to specify the ROMS_APPLICATION & MY_ROMS_SRC variables. It will normally
+# contain other environmental variables, notably MY_HEADER_DIR and MY_ANALYTICAL_DIR
 
-source ./build_parameters
+source ${build_env}
 
 if test -n "${MY_ROMS_SRC}"
 then
