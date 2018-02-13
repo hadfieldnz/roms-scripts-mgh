@@ -106,7 +106,7 @@ echo "Moving to source directory"
 cd ${MY_ROMS_SRC}
 
 echo "Git repository status:"
-git status | (sed -r 's/^(.*)/  \1/g') || echo "This does not appear to be not a Git repository"
+(git status || echo "This does not appear to be a Git repository") | (sed -r 's/^(.*)/  \1/g')
 
 # Test for the presence of a makefile.
 
