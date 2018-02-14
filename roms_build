@@ -16,14 +16,16 @@
 #     old-style build_parameters files.
 #   - Positional arguments are now allowed and are passed to make.
 # MGH 2018-02-14
-#   - The name of the "build parameters" file can now be set via the command
+#   - The name of the build environment file can now be set via the command
 #     line. The default is .build_env.
+# MGH 2018-02-15
+#   - Added the -p (print makefile macros) option, supporting multiple macros
 
 set -e
 
 # Process arguments
 
-while getopts "b:e:gmos:" opt
+while getopts "b:e:gmop:s:" opt
 do
   case "${opt}" in
     b)
@@ -40,6 +42,9 @@ do
       ;;
     o)
       use_omp=1
+      ;;
+    p)
+      pargs=${pargs}" "print-${OPTARG}
       ;;
     s)
       scratch_dir=${OPTARG}
@@ -91,7 +96,7 @@ fi
 
 if test -n "${MY_HEADER_DIR}"
 then
-  echo ROMS header directlory is ${MY_HEADER_DIR}
+  echo ROMS header directory is ${MY_HEADER_DIR}
 fi
 
 if test -n "${MY_ANALYTICAL_DIR}"
@@ -105,7 +110,7 @@ echo "Moving to source directory"
 
 cd ${MY_ROMS_SRC}
 
-echo "Git repository status:"
+echo "Git working tree status:"
 (git status || echo "This does not appear to be a Git repository") | (sed -r 's/^(.*)/  \1/g')
 
 # Test for the presence of a makefile.
@@ -134,7 +139,7 @@ then
   make_args=${make_args}" USE_OpenMP=on"
   scratch_dir=${scratch_dir}-OpenMP
 fi
-make ${make_args} ROMS_APPLICATION=${ROMS_APPLICATION} SCRATCH_DIR=${scratch_dir} BIN=${scratch_dir}/ocean "$@"
+make ${make_args} ROMS_APPLICATION=${ROMS_APPLICATION} SCRATCH_DIR=${scratch_dir} BIN=${scratch_dir}/ocean ${pargs} "$@"
 
 # Copy executable to the appropriate directory
 
