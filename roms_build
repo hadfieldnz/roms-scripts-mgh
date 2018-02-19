@@ -20,12 +20,15 @@
 #     line. The default is .build_env.
 # MGH 2018-02-15
 #   - Added the -p (print makefile macros) option, supporting multiple macros
+# MGH 2018-02-19
+#   - Now aborts if Git repository is not as expected. The -f option allows
+#     these checks to be skipped.
 
 set -e
 
 # Process arguments
 
-while getopts "b:e:gmop:s:" opt
+while getopts "b:e:fgmop:s:" opt
 do
   case "${opt}" in
     b)
@@ -33,6 +36,9 @@ do
       ;;
     e)
       exe_dir=${OPTARG}
+      ;;
+    f)
+      force=1
       ;;
     g)
       use_debug=1
@@ -57,19 +63,19 @@ if test -z "${build_env}"
 then
   build_env=.build_env
 fi
-echo The build environment file is ${build_env}
+echo "The build environment file is ${build_env}"
 
 if test -z "${scratch_dir}"
 then
-  scratch_dir=$(roms_bldir)/Build-$(uname -s -m | tr " " "-")-$(basename ${FORT})
+  scratch_dir=$(roms_bldir)/Build-$(uname -s -m | tr " " "-")-${FORT}
 fi
-echo ROMS will be built in ${scratch_dir}
+echo "ROMS will be built in ${scratch_dir}"
 
 if test -z "${exe_dir}"
 then
   exe_dir=${PWD}
 fi
-echo The executable will be copied to ${exe_dir}
+echo "The executable will be copied to ${exe_dir}"
 
 # The build environment file must contain code to specify the ROMS_APPLICATION
 # and MY_ROMS_SRC variables. It will normally specify other environment
@@ -78,40 +84,65 @@ echo The executable will be copied to ${exe_dir}
 
 source ${build_env}
 
-if test -n "${MY_ROMS_SRC}"
-then
-  echo ROMS source path is ${MY_ROMS_SRC}
-else
-  echo "MY_ROMS_SRC has not been set" 1>&2
-  exit 1
-fi
-
 if test -n "${ROMS_APPLICATION}"
 then
-  echo ROMS application is ${ROMS_APPLICATION}
+  echo "ROMS application is ${ROMS_APPLICATION}"
 else
   echo "ROMS_APPLICATION has not been set" 1>&2
   exit 1
 fi
 
+if test -n "${MY_ROMS_SRC}"
+then
+  echo "ROMS source path is ${MY_ROMS_SRC}"
+else
+  echo "MY_ROMS_SRC has not been set" 1>&2
+  exit 1
+fi
+
+if test -z "${MY_ROMS_BRANCH}"
+then
+  export MY_ROMS_BRANCH=master
+fi
+
 if test -n "${MY_HEADER_DIR}"
 then
-  echo ROMS header directory is ${MY_HEADER_DIR}
+  echo "ROMS header directory is ${MY_HEADER_DIR}"
 fi
 
 if test -n "${MY_ANALYTICAL_DIR}"
 then
-  echo ROMS analytical directory is ${MY_ANALYTICAL_DIR}
+  echo "ROMS analytical directory is ${MY_ANALYTICAL_DIR}"
 fi
 
 # Move to source directory
 
-echo "Moving to source directory"
+echo Moving to source directory
 
 cd ${MY_ROMS_SRC}
 
-echo "Git working tree status:"
-(git status 2> /dev/null || echo "This does not appear to be a Git repository") | (sed -r 's/^(.*)/  \1/g')
+if test -n "${force}"
+then
+  echo "Skipping checks of Git repository status"
+else
+  echo "Checking Git repository status (use -f to skip)..."
+  branch=$(git rev-parse --abbrev-ref HEAD)
+  if test "${branch}" = "${MY_ROMS_BRANCH}"
+  then
+    echo "  The repository is on the expected branch ${MY_ROMS_BRANCH}"
+  else
+    echo "  The repository is not on the expected branch ${MY_ROMS_BRANCH}" 1>&2
+	exit 1
+  fi
+  nmods=$(git status --porcelain | wc -l)
+  if test ${nmods} -eq 0
+  then
+    echo "  The working tree is clean"
+  else
+    echo "  The working tree is DIRTY with ${nmods} modifications" 1>&2
+	exit 1
+  fi
+fi
 
 # Test for the presence of a makefile.
 
@@ -121,7 +152,7 @@ then
   exit 1
 fi
 
-# Make executable
+# Build up the make command and run it
 
 make_args=""
 if test -n "${use_debug}"
@@ -145,6 +176,6 @@ make ${make_args} ROMS_APPLICATION=${ROMS_APPLICATION} SCRATCH_DIR=${scratch_dir
 
 if (test -f ${scratch_dir}/ocean)
 then
-  echo "Copying executable to "${exe_dir}
+  echo "Copying executable to ${exe_dir}"
   cp -vf ${scratch_dir}/ocean ${exe_dir}
 fi
