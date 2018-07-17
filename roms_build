@@ -23,6 +23,9 @@
 # MGH 2018-02-19
 #   - Now aborts if Git repository is not as expected. The -f option allows
 #     these checks to be skipped.
+# MGH 2018-07-17
+#   - The executable name is now oceanS (serial), oceanO (OpenMP) or oceanM (MPI).
+#     The name oceanG (for ROMS debug executables) is not used.
 
 set -e
 
@@ -59,6 +62,12 @@ do
 done
 shift $(( ${OPTIND}-1 ))
 
+if test -n "${use_omp}" -a -n "${use_mpi}"
+then
+  echo "OpenMP and MPI modes cannot both be selected" 1>&2
+  exit 1
+fi
+
 if test -z "${build_env}"
 then
   build_env=.build_env
@@ -70,6 +79,17 @@ then
   scratch_dir=$(roms_bldir)/Build-$(uname -s -m | tr " " "-")-${FORT}
 fi
 echo "ROMS will be built in ${scratch_dir}"
+
+exe_name=oceanS
+if test -n "${use_omp}"
+then
+  exe_name=oceanO
+fi
+if test -n "${use_mpi}"
+then
+  exe_name=oceanM
+fi
+echo "The executable name is ${exe_name}"
 
 if test -z "${exe_dir}"
 then
@@ -170,12 +190,12 @@ then
   make_args=${make_args}" USE_OpenMP=on"
   scratch_dir=${scratch_dir}-OpenMP
 fi
-make ${make_args} ROMS_APPLICATION=${ROMS_APPLICATION} SCRATCH_DIR=${scratch_dir} BIN=${scratch_dir}/ocean ${pargs} "$@"
+make ${make_args} ROMS_APPLICATION=${ROMS_APPLICATION} SCRATCH_DIR=${scratch_dir} BIN=${scratch_dir}/${exe_name} ${pargs} "$@"
 
 # Copy executable to the appropriate directory
 
-if (test -f ${scratch_dir}/ocean)
+if (test -f ${scratch_dir}/${exe_name})
 then
   echo "Copying executable to ${exe_dir}"
-  cp -vf ${scratch_dir}/ocean ${exe_dir}
+  cp -vf ${scratch_dir}/${exe_name} ${exe_dir}
 fi

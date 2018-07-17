@@ -285,7 +285,7 @@ def main():
     usage = __doc__ + "\n\n  %prog [options]"
     op = OptionParser(usage=usage)
     op.add_option("-e", "--executable",
-                  action="store", type="string", dest="exe", default="./ocean", metavar="EXE",
+                  action="store", type="string", dest="exe", default="", metavar="EXE",
                   help="Location of ROMS executable")
     op.add_option("", "--min",
                   action="store", type="int", dest="min", default=1, metavar="MIN",
@@ -305,8 +305,7 @@ def main():
     op.add_option("-o", "--openmp",
                   action="store_true", default=False,
                   help="Run OpenMP executable")
-    op.add_option("", "--llsubmit",
-                  action="store_true", dest="llsub", default=False,
+    op.add_option("", "--llsubmit",action="store_true", dest="llsub", default=False,
                   help="Create LoadLeveler scripts for Fitzroy")
     op.add_option("", "--slurm",
                   action="store_true", dest="slurm", default=False,
@@ -329,6 +328,15 @@ def main():
     (opts, args) = op.parse_args()
     if len(args) > 0:
         sys.exit('This script does not accept positional arguments')
+    if opts.mpi and opts.openmp:
+        sys.exit('MPI and OpenMP modes cannot both be set')
+    if not opts.exe:
+        if opts.mpi:
+            opts.exe = "oceanM"
+        elif opts.openmp:
+            opts.exe = "oceanO"
+        else:
+            opts.exe = "oceanS"
     try:
         for index in range(opts.min,opts.max+1):
             mkinput(index, opts.tfile, opts.ni, opts.nj)
