@@ -1,35 +1,34 @@
 #! /usr/bin/env python3
 
-"""Create script and input files for ROMS simulations"""
+"""Create script, batch and input files for ROMS simulations. Loadleveler and
+SLURM batch files are supported but are specific to NIWA computers."""
 
-# MGH 2009-10-22
-#   - The default location of the executable is now the current
-#   working directory. The bldir function is no longer required and
-#   has been deleted.
-#   - Added support for Moab scripts.
-# MGH 2010-03-02
-#   - Moab MPI scripts revamped.
-# MGH 2010-04-3
-#   - Moab MPI scripts further changed: the job is no longer
-#     constrained to run on the minimum number of nodes.
-# MGH 2010-10-20
-#   - Added the ability to produce LoadLeveler scripts; removed
-#     ability to produce Qsub scripts or Mosrun scripts.
-# MGH 2011-11-25
-#   - Removed "node_usage = not_shared" line from Loadleveler parallel
-#     scripts.
-# MGH 2012-09-13
-#   - Corrected expression used to calculate n_node for Fitzroy MPI
-#     jobs.
-#   - Add jobid field in output file name for Fitzroy Loadleveler jobs.
-# MGH 2012-10-01
-#   - Add account option to support the account_no Loadleveler keyword
-#     on Fitzroy
-# MGH 2012-10-04
-#   - Changed default class for LoadLeveler jobs to General.
-# MGH 2012-10-05
-#   - LoadLeveler class option is now associated with the queue command-line
-#     option (which is already used for Moab jobs).
+# History (most recent first):
+#
+# MGH 2018-10-24
+#   - Arguments parsed with argparse instead of optparse
+#   - SLURM scripts now adapted for the new NIWA HPCF system, Maui
+# MGH 2018-02-01
+#   - Converted to python3
+# MGH 2018-02-02
+#   - Fixed several python3 porting bugs.
+# MGH 2018-01-12
+#   - Implemented SLURM scripts, so far only for MPI
+# MGH 2018-01-12
+#   - Implemented SLURM scripts for serial and OpenMP
+#   - Removed Moab support
+# MGH 2015-08-12
+#   - For Loadleveler jobs, added network.MPI directive to run on Infiniband.
+#   - Fixed up indentation problems caused by tab->space conversion.
+# MGH 2014-06-30
+#   - Default account now COBR1404.
+# MGH 2013-06-19
+#   - Changed MP_* environment variables set for MPI Loadleveler runs: removed
+#     existing settings and added MP_TIMEOUT=300 to work around a delay in
+#     setting up process on Fitzroy.
+#   - Added calls to data before & after invoking ROMS in Loadleveler scripts.
+#   - Names of script files changed to rom???.ll (Loadleveler), rom???.msub (Moab)
+#     and rom???.sh (shell script).
 # MGH 2012-10-17
 #   - Removed jobid field from output log file name (but left it in output
 #     err file name) for Fitzroy Loadleveler jobs.
@@ -38,34 +37,40 @@
 # MGH 2012-10-17
 #   - Removed jobid field from output err file name for Fitzroy Loadleveler
 #     jobs.
-# MGH 2013-06-19
-#   - Changed MP_* environment variables set for MPI Loadleveler runs: removed
-#     existing settings and added MP_TIMEOUT=300 to work around a delay in
-#     setting up process on Fitzroy.
-#   - Added calls to data before & after invoking ROMS in Loadleveler scripts.
-#   - Names of script files changed to rom???.ll (Loadleveler), rom???.msub (Moab)
-#     and rom???.sh (shell script).
-# MGH 2014-06-30
-#   - Default account now COBR1404.
-# MGH 2015-08-12
-#   - For Loadleveler jobs, added network.MPI directive to run on Infiniband.
-#   - Fixed up indentation problems caused by tab->space conversion.
-# MGH 2018-01-12
-#   - Implemented SLURM scripts, so far only for MPI
-# MGH 2018-01-12
-#   - Implemented SLURM scripts for serial and OpenMP
-#   - Removed Moab support
-# MGH 2018-02-01
-#   - Converted to python3
-# MGH 2018-02-02
-#   - Fixed several python3 porting bugs.
+# MGH 2012-10-05
+#   - LoadLeveler class option is now associated with the queue command-line
+#     option (which is already used for Moab jobs).
+# MGH 2012-10-04
+#   - Changed default class for LoadLeveler jobs to General.
+# MGH 2012-10-01
+#   - Add account option to support the account_no Loadleveler keyword
+#     on Fitzroy
+# MGH 2012-09-13
+#   - Corrected expression used to calculate n_node for Fitzroy MPI
+#     jobs.
+#   - Add jobid field in output file name for Fitzroy Loadleveler jobs.
+# MGH 2011-11-25
+#   - Removed "node_usage = not_shared" line from Loadleveler parallel
+#     scripts.
+# MGH 2010-10-20
+#   - Added the ability to produce LoadLeveler scripts; removed
+#     ability to produce Qsub scripts or Mosrun scripts.
+# MGH 2010-04-3
+#   - Moab MPI scripts further changed: the job is no longer
+#     constrained to run on the minimum number of nodes.
+# MGH 2010-03-02
+#   - Moab MPI scripts revamped.
+# MGH 2009-10-22
+#   - The default location of the executable is now the current
+#   working directory. The bldir function is no longer required and
+#   has been deleted.
+#   - Added support for Moab scripts.
 
 import sys
 import os
 import re
 import math
-
-from optparse import OptionParser
+import argparse
 
 p = re.compile('<<|>>')
 
@@ -172,7 +177,7 @@ def mk_slurm(index, n_pro, resub, mpi, openmp, queue, acct, wall, exe):
     sys.stderr.write('Writing SLURM script file %s\n'%(outname))
     outfile = open(outname, 'w')
     if mpi:
-        # Some code specific to the Kupe General queue
+        # Some code specific to the Maui General queue
         n_node = 1+(n_pro-1)//40
         if n_pro >= 40:
             usage = 'exclusive'
@@ -180,7 +185,7 @@ def mk_slurm(index, n_pro, resub, mpi, openmp, queue, acct, wall, exe):
             usage = 'share'
         outfile.write(
             '#! /bin/bash\n'
-            '#SBATCH --partition=NeSI\n'
+            '#SBATCH --partition=nesi_research\n'
             '#SBATCH --job-name=ocean\n'
             '#SBATCH --output=rom%3.3d.log\n'
             '#SBATCH --error=rom%3.3d.err\n'
@@ -200,7 +205,7 @@ def mk_slurm(index, n_pro, resub, mpi, openmp, queue, acct, wall, exe):
     elif openmp:
         outfile.write(
             '#! /bin/bash\n'
-            '#SBATCH --partition=NeSI\n'
+            '#SBATCH --partition=nesi_research\n'
             '#SBATCH --job-name=ocean\n'
             '#SBATCH --output=rom%3.3d.log\n'
             '#SBATCH --error=rom%3.3d.err\n'
@@ -222,7 +227,7 @@ def mk_slurm(index, n_pro, resub, mpi, openmp, queue, acct, wall, exe):
     else:
         outfile.write(
             '#! /bin/bash\n'
-            '#SBATCH --partition=NeSI\n'
+            '#SBATCH --partition=nesi_research\n'
             '#SBATCH --job-name=ocean\n'
             '#SBATCH --output=rom%3.3d.log\n'
             '#SBATCH --error=rom%3.3d.err\n'
@@ -282,88 +287,79 @@ def mk_script(index, n_pro, resub, mpi, openmp, exe):
     os.chmod(outname,0o755)
 
 def main():
-    usage = __doc__ + "\n\n  %prog [options]"
-    op = OptionParser(usage=usage)
-    op.add_option("-e", "--executable",
-                  action="store", type="string", dest="exe", default="", metavar="EXE",
-                  help="Location of ROMS executable")
-    op.add_option("", "--min",
-                  action="store", type="int", dest="min", default=1, metavar="MIN",
-                  help="Minimum index (inclusive) for generated files")
-    op.add_option("", "--max",
-                  action="store", type="int", dest="max", default=1, metavar="MAX",
-                  help="Maximum index (inclusive) for generated files")
-    op.add_option("--ni",
-                  action="store", type="int", dest="ni", default=1, metavar="NI",
-                  help="Number of tiles in I direction")
-    op.add_option("--nj",
-                  action="store", type="int", dest="nj", default=1, metavar="NJ",
-                  help="Number of tiles in J direction")
-    op.add_option("-m", "--mpi",
-                  action="store_true", default=False,
-                  help="Run MPI executable")
-    op.add_option("-o", "--openmp",
-                  action="store_true", default=False,
-                  help="Run OpenMP executable")
-    op.add_option("", "--llsubmit",action="store_true", dest="llsub", default=False,
-                  help="Create LoadLeveler scripts for Fitzroy")
-    op.add_option("", "--slurm",
-                  action="store_true", dest="slurm", default=False,
-                  help="Create SLURM scripts for Kupe")
-    op.add_option("-q", "--queue",
-                  action="store", type="string", dest="queue", default="",
-                  metavar="QNAME",
-                  help="Queue name, where applicable")
-    op.add_option("-a", "--account",
-                  action="store", type="string", dest="acct", default="",
-                  metavar="ACCOUNT",
-                  help="Account ID, where applicable")
-    op.add_option("-t", "--template",
-                  action="store", type="string", dest="tfile", default="roms.in",
-                  metavar="TFILE",
-                  help="ROMS input template file")
-    op.add_option("-w", "--walltime",
-                  action="store", type="string", dest="wall", default="", metavar="WALL",
-                  help="Wall clock time allocated for job, where applicable")
-    (opts, args) = op.parse_args()
-    if len(args) > 0:
-        sys.exit('This script does not accept positional arguments')
-    if opts.mpi and opts.openmp:
+    ap = argparse.ArgumentParser(description=__doc__,
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    ap.add_argument("-e", "--executable",
+        action="store", dest="exe", metavar="EXE",
+        help="Location of ROMS executable")
+    ap.add_argument("--min",
+        action="store", type=int, dest="min", default=1, metavar="MIN",
+        help="Minimum index (inclusive) for generated files")
+    ap.add_argument("--max",
+        action="store", type=int, dest="max", default=1, metavar="MAX",
+        help="Maximum index (inclusive) for generated files")
+    ap.add_argument("--ni",
+        action="store", type=int, dest="ni", default=1, metavar="NI",
+        help="Number of tiles in I direction")
+    ap.add_argument("--nj",
+        action="store", type=int, dest="nj", default=1, metavar="NJ",
+        help="Number of tiles in J direction")
+    ap.add_argument("-m", "--mpi",
+        action="store_true", default=False,
+        help="Run MPI executable")
+    ap.add_argument("-o", "--openmp",
+        action="store_true", default=False,
+        help="Run OpenMP executable")
+    ap.add_argument("--llsubmit", action="store_true", dest="llsub", default=False,
+        help="Create LoadLeveler scripts for Fitzroy")
+    ap.add_argument("--slurm",
+        action="store_true", dest="slurm", default=False,
+        help="Create SLURM scripts for Maui")
+    ap.add_argument("-q", "--queue",
+        action="store", dest="queue", metavar="QNAME",
+        help="Queue name, where applicable")
+    ap.add_argument("-a", "--account",
+        action="store", dest="acct", metavar="ACCOUNT",
+        help="Account ID, where applicable")
+    ap.add_argument("-t", "--template",
+        action="store", dest="tfile", default="roms.in", metavar="TFILE",
+        help="ROMS input template file")
+    ap.add_argument("-w", "--walltime",
+        action="store", dest="wall", metavar="WALL",
+        help="Wall clock time allocated for job, where applicable")
+    args = ap.parse_args()
+    if args.mpi and args.openmp:
         sys.exit('MPI and OpenMP modes cannot both be set')
-    if not opts.exe:
-        if opts.mpi:
-            opts.exe = "oceanM"
-        elif opts.openmp:
-            opts.exe = "oceanO"
+    if not args.exe:
+        if args.mpi:
+            args.exe = "./oceanM"
+        elif args.openmp:
+            args.exe = "./oceanO"
         else:
-            opts.exe = "oceanS"
+            args.exe = "./oceanS"
     try:
-        for index in range(opts.min,opts.max+1):
-            mkinput(index, opts.tfile, opts.ni, opts.nj)
-        for index in range(opts.min,opts.max+1):
-            if opts.llsub:
-                if not opts.queue:
-                    opts.queue = 'General'
-                if not opts.acct:
+        for index in range(args.min,args.max+1):
+            mkinput(index, args.tfile, args.ni, args.nj)
+        for index in range(args.min,args.max+1):
+            if args.llsub:
+                if not args.queue:
+                    args.queue = 'General'
+                if not args.acct:
                     # Valid values are: COBR1404, CLCS1402
-                    opts.acct = 'COBR1404'
-                if not opts.wall:
+                    args.acct = 'COBR1404'
+                if not args.wall:
                     # The default value should depend on the class: see llclass -l.
-                    opts.wall = '12:00:00'
-                mk_llsub(index, opts.ni*opts.nj, index < opts.max, opts.mpi,
-                         opts.openmp, opts.queue, opts.acct, opts.wall, opts.exe)
-            elif opts.slurm:
-                if not opts.queue:
-                    opts.queue = None
-                if not opts.acct:
-                    opts.acct = None
-                if not opts.wall:
-                    opts.wall = '12:00:00'
-                mk_slurm(index, opts.ni*opts.nj, index < opts.max, opts.mpi,
-                          opts.openmp, opts.queue, opts.acct, opts.wall, opts.exe)
+                    args.wall = '12:00:00'
+                mk_llsub(index, args.ni*args.nj, index < args.max, args.mpi,
+                         args.openmp, args.queue, args.acct, args.wall, args.exe)
+            elif args.slurm:
+                if not args.wall:
+                    args.wall = '12:00:00'
+                mk_slurm(index, args.ni*args.nj, index < args.max, args.mpi,
+                          args.openmp, args.queue, args.acct, args.wall, args.exe)
             else:
-                mk_script(index, opts.ni*opts.nj, index < opts.max, opts.mpi,
-                          opts.openmp, opts.exe)
+                mk_script(index, args.ni*args.nj, index < args.max, args.mpi,
+                          args.openmp, args.exe)
     except OSError as err:
         _, strerr = err.args
         sys.exit(strerr)
