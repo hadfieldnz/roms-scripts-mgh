@@ -152,7 +152,7 @@ else
     echo "  The repository is on the expected branch ${MY_ROMS_BRANCH}"
   else
     echo "  The repository is not on the expected branch ${MY_ROMS_BRANCH}" 1>&2
-	exit 1
+    exit 1
   fi
   nmods=$(git status --porcelain | wc -l)
   if test ${nmods} -eq 0
@@ -160,7 +160,7 @@ else
     echo "  The working tree is clean"
   else
     echo "  The working tree is DIRTY with ${nmods} modifications" 1>&2
-	exit 1
+    exit 1
   fi
 fi
 
@@ -192,10 +192,11 @@ then
 fi
 make ${make_args} ROMS_APPLICATION=${ROMS_APPLICATION} SCRATCH_DIR=${scratch_dir} BIN=${scratch_dir}/${exe_name} ${pargs} "$@"
 
-# Copy executable to the appropriate directory
+# Copy executable to the appropriate directory. The --preserve=mode option is
+# required on the maui.nesi.org nobackup or project volumes.
 
 if (test -f ${scratch_dir}/${exe_name})
 then
   echo "Copying executable to ${exe_dir}"
-  cp -vf ${scratch_dir}/${exe_name} ${exe_dir}
+  cp --verbose --force --preserve=mode ${scratch_dir}/${exe_name} ${exe_dir}
 fi
