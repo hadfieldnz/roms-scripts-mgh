@@ -8,6 +8,9 @@ SLURM batch files are supported but are specific to NIWA computers."""
 # MGH 2018-10-24
 #   - Arguments parsed with argparse instead of optparse
 #   - SLURM scripts now adapted for the new NIWA HPCF system, Maui
+#   - Now supports curly-bracket patterns, passed as commands to the shell,
+#     in addition to angle-bracket patterns, evaluated by the Python
+#     interpreter.
 # MGH 2018-02-01
 #   - Converted to python3
 # MGH 2018-02-02
@@ -71,8 +74,10 @@ import os
 import re
 import math
 import argparse
+import subprocess
 
-p = re.compile('<<|>>')
+p = re.compile('<<.*?>>')
+q = re.compile('{{.*?}}')
 
 def mkinput(index, tfile, ni, nj):
     infile = open(tfile,'r')
@@ -81,14 +86,33 @@ def mkinput(index, tfile, ni, nj):
     outfile = open(outname, 'w')
     for line in infile.readlines():
         if not line.startswith("!"):
-            # Split the line with the pre-compiled regular
-            # expression. This results in a list in which every second
-            # item (or should be) a Python expression to be evaluated
-            # and written into the file
-            llist = p.split(line)
-            for ii in range(1,len(llist),2):
-                llist[ii] = str(eval(llist[ii]))
-            line = ''.join(llist)
+            # Search the line for matches to the angle-brackets regular
+            # expression, evaluate the Python expression within and write the
+            # results into the line
+            nline = []
+            s0 = (None,0)
+            for m in p.finditer(line):
+                s = m.span()
+                nline.append(line[s0[1]:s[0]])
+                exp = line[s[0]+2:s[1]-2]
+                nline.append(str(eval(exp)))
+                s0 = s
+            nline.append(line[s0[1]:])
+            line = ''.join(nline)
+            # Search the line for matches to the curly-brackets regular
+            # expression, run the command within and write the
+            # results into the line
+            nline = []
+            s0 = (None,0)
+            for m in q.finditer(line):
+                s = m.span()
+                nline.append(line[s0[1]:s[0]])
+                cmd = line[s[0]+2:s[1]-2]
+                nline.append(subprocess.check_output(cmd, shell=True)
+                             .decode(sys.stdout.encoding).rstrip())
+                s0 = s
+            nline.append(line[s0[1]:])
+            line = ''.join(nline)
         outfile.write(line)
     infile.close()
     outfile.close()
