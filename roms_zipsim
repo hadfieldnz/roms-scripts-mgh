@@ -38,7 +38,7 @@ do
     t)
       # Include a time stamp in the output file name. The timestamp
       # is evaluated only once in this script.
-      timestamp=$(date +%Y%m%d%H%M%S)
+      timestamp=$(date --iso=minutes)
       ;;
   esac
 done
