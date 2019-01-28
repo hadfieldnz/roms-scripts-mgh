@@ -26,6 +26,10 @@
 # MGH 2018-07-17
 #   - The executable name is now oceanS (serial), oceanO (OpenMP) or oceanM (MPI).
 #     The name oceanG (for ROMS debug executables) is not used.
+# MGH 2019-01-28
+#   - To match recent changes in Rutgers ROMS, the executable name is now romsS
+#     (serial), romsO (OpenMP) or romsM (MPI). The name romsG (for ROMS debug
+#     executables) is not used.
 
 set -e
 
@@ -80,14 +84,14 @@ then
 fi
 echo "ROMS will be built in ${scratch_dir}"
 
-exe_name=oceanS
+exe_name=romsS
 if test -n "${use_omp}"
 then
-  exe_name=oceanO
+  exe_name=romsO
 fi
 if test -n "${use_mpi}"
 then
-  exe_name=oceanM
+  exe_name=romsM
 fi
 echo "The executable name is ${exe_name}"
 
