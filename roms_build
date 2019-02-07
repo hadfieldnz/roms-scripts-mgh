@@ -196,11 +196,11 @@ then
 fi
 make ${make_args} ROMS_APPLICATION=${ROMS_APPLICATION} SCRATCH_DIR=${scratch_dir} BIN=${scratch_dir}/${exe_name} ${pargs} "$@"
 
-# Copy executable to the appropriate directory. The --preserve=mode option is
-# required on the maui.nesi.org nobackup or project volumes.
+# Copy executable to the appropriate directory and set its executable bit.
 
 if (test -f ${scratch_dir}/${exe_name})
 then
   echo "Copying executable to ${exe_dir}"
-  cp --verbose --force --preserve=mode ${scratch_dir}/${exe_name} ${exe_dir}
+  cp --verbose --force ${scratch_dir}/${exe_name} ${exe_dir}
+  chmod +x ${exe_dir}/${exe_name}
 fi
