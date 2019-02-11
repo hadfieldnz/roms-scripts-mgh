@@ -1,9 +1,9 @@
 #! /usr/bin/env bash
 
 # This is the successor to the roms_build script, more similar in operation
-# to the build.bash scripts provided with ROMS. The only functionality
-# from the old roms_build that has been sacrificed is the ability to combine
-# multiple source trees.
+# than its predecessor to the build.bash scripts provided with ROMS. The only
+# functionality from the old roms_build that has been sacrificed is the ability
+# to combine multiple source trees.
 
 # MGH 2018-02-08
 #   - Written as roms_build2
