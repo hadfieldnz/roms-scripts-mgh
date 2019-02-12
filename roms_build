@@ -35,7 +35,7 @@ set -e
 
 # Process arguments
 
-while getopts "b:e:fgmop:s:" opt
+while getopts "b:e:fgmn:op:s:" opt
 do
   case "${opt}" in
     b)
@@ -52,6 +52,9 @@ do
       ;;
     m)
       use_mpi=1
+      ;;
+    n)
+      exe_name=${OPTARG}
       ;;
     o)
       use_omp=1
@@ -84,14 +87,17 @@ then
 fi
 echo "ROMS will be built in ${scratch_dir}"
 
-exe_name=romsS
-if test -n "${use_omp}"
+if test -z "${exe_name}"
 then
-  exe_name=romsO
-fi
-if test -n "${use_mpi}"
-then
-  exe_name=romsM
+  exe_name=romsS
+  if test -n "${use_omp}"
+  then
+    exe_name=romsO
+  fi
+  if test -n "${use_mpi}"
+  then
+    exe_name=romsM
+  fi
 fi
 echo "The executable name is ${exe_name}"
 
