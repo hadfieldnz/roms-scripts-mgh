@@ -1,7 +1,12 @@
 # ROMS environment examples
 
-This file contains example Bash code snippets to set up the environment for building
-and running ROMS
+This file contains example Bash functions to set up the environment for building
+and running ROMS. These functions will normally be defined in ~/.bashrc and then
+invoked from the command line.
+
+The MCT_INCDIR and MCT_LIBDIR variables, where present, point to directories
+where the MCT library has been installed. The variables are required for coupled
+model runs, eg. ROMS+SWAN.
 
 Gfortran 4.8.5 on CentOS 7
 ```
