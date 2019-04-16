@@ -20,6 +20,10 @@
 # MGH 2017-08-02
 #   - Changed code for raising and catching errors, in line
 #     with PEP-3151.
+# MGH 2019-04-17
+#   - Arguments parsed with argparse instead of optparse. The (seldom used)
+#     output file name argument is now an option ("-o" or "--output").
+#   - Now packs detided zeta, ubar, vbar variables.
 
 import sys
 import os
@@ -31,7 +35,7 @@ import numpy as np
 from netCDF4 import Dataset
 from datetime import datetime
 
-from optparse import OptionParser
+import argparse
 
 # Note that the general approach is to suppress warnings for
 # floating point operations, when these are expected, but
@@ -43,8 +47,11 @@ pack_range = np.array([-32766,32767], dtype=np.int16)
 # Specified data ranges
 data_range = {}
 data_range['zeta'] = [-10,10]
+data_range['zeta_detided'] = [-10,10]
 data_range['ubar'] = [-10,10]
+data_range['ubar_detided'] = [-10,10]
 data_range['vbar'] = [-10,10]
+data_range['vbar_detided'] = [-10,10]
 data_range['u'] = [-10,10]
 data_range['v'] = [-10,10]
 data_range['w'] = [-1,1]
@@ -177,30 +184,28 @@ def process(file_in, file_out, over):
     os.rename(file_tmp,file_out)
 
 def main():
-    usage = __doc__ + "\n\n  %prog file_in [file_out] [options]"
-    op = OptionParser(usage=usage)
-    op.add_option("-O", "--overwrite",
-                  action="store_true", default=False,
-                  help="Overwrite output file without prompting")
-    op.add_option("-x", "--exclude",
-                  action="store", type="string", dest="exclude", default="", metavar="EXCL",
-                  help="Comma-separated list of variable-name patterns to exclude from packing")
-    (opts, args) = op.parse_args()
-    if len(args) == 0:
-        sys.exit('This script requires at least one positional argument')
-    elif len(args) == 1:
-        file_in = args[0]
-        file_out = args[0]
-    elif len(args) == 2:
-        file_in = args[0]
-        file_out = args[1]
-    else:
-        sys.exit('This script requires no more than 2 positional arguments')
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    ap.add_argument("file_in",
+                    action="store", type=str,
+                    help="Input file name")
+    ap.add_argument("-o", "--output",
+                    action="store", type=str, dest="file_out",
+                    help="Output file name, if different from input")
+    ap.add_argument("-O", "--overwrite",
+                    action="store_true", default=False,
+                    help="Overwrite existing output file")
+    ap.add_argument("-x", "--exclude",
+                    action="store", type=str, dest="exclude", default="", metavar="EXCL",
+                    help="Comma-separated list of variable-name patterns to exclude from packing")
+    args = ap.parse_args()
+    if not args.file_out:
+        args.file_out = args.file_in
     try:
-        print('Determining packing for {}'.format(file_in))
-        determine(file_in, opts.exclude)
-        print(('Packing {} to {}'.format(file_in, file_out)))
-        process(file_in, file_out, opts.overwrite)
+        print('Determining packing for {}'.format(args.file_in))
+        determine(args.file_in, args.exclude)
+        print(('Packing {} to {}'.format(args.file_in, args.file_out)))
+        process(args.file_in, args.file_out, args.overwrite)
     except OSError as err:
         _, strerr = err.args
         sys.exit(strerr)
