@@ -1,10 +1,17 @@
 #! /usr/bin/env python3
 
-"""Create script, batch and input files for ROMS simulations. Loadleveler and
-SLURM batch files are supported but are specific to NIWA computers."""
+"""Create script, batch and input files for ROMS simulations. 
+
+Loadleveler and SLURM batch files are supported but are specific to
+NIWA computers."""
 
 # History (most recent first):
 #
+# MGH 2019-05-09
+#   - Now accepts triple-angle-bracket patterns, to contain statements to be
+#     executed by the Python interpreter. This allows values to be assigned
+#     to variables, which are then available in double-angle-bracket
+#     expressions.
 # MGH 2019-01-28
 #   - To match a recent change in Rutgers ROMS, the default executable name is
 #     now romsS, romsO or romsM. The job name, where applicable, is now ROMS.
@@ -79,16 +86,36 @@ import math
 import argparse
 import subprocess
 
+# Compile the regular expressions corresponding the triple-angle, double-angleand double-curly
+# bracket patterns
+o = re.compile('<<<.*?>>>')
 p = re.compile('<<.*?>>')
 q = re.compile('{{.*?}}')
 
-def mkinput(index, tfile, ni, nj):
+def mkinput(index, tfile, ni, nj, verbose):
     infile = open(tfile,'r')
     outname = 'rom%3.3d.in'%(index)
     sys.stderr.write('Writing ROMS input file '+outname+'\n')
     outfile = open(outname, 'w')
     for line in infile.readlines():
         if not line.startswith("!"):
+            # Search the line for matches to the triple-angle-brackets pattern
+            # and execute the Python statement within. Do not write
+            # any output into the line. Effects of executing the statement
+            # (eg. the assignment of values to variables) persist for all
+            # subsequent processing.
+            nline = []
+            s0 = (None,0)
+            for m in o.finditer(line):
+                s = m.span()
+                nline.append(line[s0[1]:s[0]])
+                stm = line[s[0]+3:s[1]-3]
+                if verbose:
+                    print('Executing statement: '+stm)
+                exec(stm)
+                s0 = s
+            nline.append(line[s0[1]:])
+            line = ''.join(nline)
             # Search the line for matches to the angle-brackets regular
             # expression, evaluate the Python expression within and write the
             # results into the line
@@ -98,6 +125,8 @@ def mkinput(index, tfile, ni, nj):
                 s = m.span()
                 nline.append(line[s0[1]:s[0]])
                 exp = line[s[0]+2:s[1]-2]
+                if verbose:
+                    print('Evaluating expression: '+exp)
                 nline.append(str(eval(exp)))
                 s0 = s
             nline.append(line[s0[1]:])
@@ -111,11 +140,14 @@ def mkinput(index, tfile, ni, nj):
                 s = m.span()
                 nline.append(line[s0[1]:s[0]])
                 cmd = line[s[0]+2:s[1]-2]
+                if verbose:
+                    print('Running command and getting output: '+cmd)
                 nline.append(subprocess.check_output(cmd, shell=True)
                              .decode(sys.stdout.encoding).rstrip())
                 s0 = s
             nline.append(line[s0[1]:])
             line = ''.join(nline)
+        # Write the line
         outfile.write(line)
     infile.close()
     outfile.close()
@@ -354,6 +386,9 @@ def main():
     ap.add_argument("-w", "--walltime",
         action="store", dest="wall", metavar="WALL",
         help="Wall clock time allocated for job, where applicable")
+    ap.add_argument("-v", "--verbose",
+        action="store_true", default=False,
+        help="Produce verbose output")
     args = ap.parse_args()
     if args.mpi and args.openmp:
         sys.exit('MPI and OpenMP modes cannot both be set')
@@ -366,7 +401,7 @@ def main():
             args.exe = "./romsS"
     try:
         for index in range(args.min,args.max+1):
-            mkinput(index, args.tfile, args.ni, args.nj)
+            mkinput(index, args.tfile, args.ni, args.nj, args.verbose)
         for index in range(args.min,args.max+1):
             if args.llsub:
                 if not args.queue:
