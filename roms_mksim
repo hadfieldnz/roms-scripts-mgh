@@ -1,12 +1,33 @@
 #! /usr/bin/env python3
 
-"""Create script, batch and input files for ROMS simulations. 
+"""Create script, batch and input files for ROMS simulations."""
 
-Loadleveler and SLURM batch files are supported but are specific to
-NIWA computers."""
+# A template file ("roms.in" by default) is read and used to generate
+# a series of output files. Text matching either of the following two
+# patterns can be inserted in the template file and is processed by the
+# script:
+#    <<...>>: Text inside the brackets is evaluated as a Python expression
+#        and the result is inserted into the input file.
+#    <<<...>>>: Text inside the brackets is executed as a Python statement.
+#        The effects of this statement (variables created, modules imported)
+#        remain in effect for the remainder of the input file processing. No
+#        corresponding output is written into the input file.
+#      
+# One function and several variables are available to the Python expressions
+# and statements:
+#     run(): This function runs a command in the shell and returns the output
+#     index: The index of the input file; the minimum and maximum indices are
+#         controlled by the --min and --max arguments.
+#     ni,nj: The number of tiles in the xi & eta directions; these are
+#         controlled by the --ni and --nj arguments
 
 # History (most recent first):
 #
+# MGH 2019-05-11
+#   - The run function was added and is available during input-file processing.
+#   - The {{...}} notation is now deprecated.
+#   - All lines, including comments, are now scanned for eligible patterns and
+#     processed.
 # MGH 2019-05-09
 #   - Now accepts triple-angle-bracket patterns, to contain statements to be
 #     executed by the Python interpreter. This allows values to be assigned
@@ -79,12 +100,11 @@ NIWA computers."""
 #   has been deleted.
 #   - Added support for Moab scripts.
 
-import sys
 import os
+import sys
 import re
 import math
 import argparse
-import subprocess
 
 # Compile the regular expressions corresponding the triple-angle, double-angleand double-curly
 # bracket patterns
@@ -92,61 +112,68 @@ o = re.compile('<<<.*?>>>')
 p = re.compile('<<.*?>>')
 q = re.compile('{{.*?}}')
 
+def run(cmd):
+    """Run the specified command in the shell and return the output"""
+    import subprocess
+    return subprocess.check_output(cmd, shell=True).decode(sys.stdout.encoding).rstrip()
+
+warn_curly=True
+
 def mkinput(index, tfile, ni, nj, verbose):
     infile = open(tfile,'r')
     outname = 'rom%3.3d.in'%(index)
-    sys.stderr.write('Writing ROMS input file '+outname+'\n')
+    print('Writing ROMS input file '+outname,file=sys.stderr)
     outfile = open(outname, 'w')
     for line in infile.readlines():
-        if not line.startswith("!"):
-            # Search the line for matches to the triple-angle-brackets pattern
-            # and execute the Python statement within. Do not write
-            # any output into the line. Effects of executing the statement
-            # (eg. the assignment of values to variables) persist for all
-            # subsequent processing.
-            nline = []
-            s0 = (None,0)
-            for m in o.finditer(line):
-                s = m.span()
-                nline.append(line[s0[1]:s[0]])
-                stm = line[s[0]+3:s[1]-3]
-                if verbose:
-                    print('Executing statement: '+stm)
-                exec(stm)
-                s0 = s
-            nline.append(line[s0[1]:])
-            line = ''.join(nline)
-            # Search the line for matches to the angle-brackets regular
-            # expression, evaluate the Python expression within and write the
-            # results into the line
-            nline = []
-            s0 = (None,0)
-            for m in p.finditer(line):
-                s = m.span()
-                nline.append(line[s0[1]:s[0]])
-                exp = line[s[0]+2:s[1]-2]
-                if verbose:
-                    print('Evaluating expression: '+exp)
-                nline.append(str(eval(exp)))
-                s0 = s
-            nline.append(line[s0[1]:])
-            line = ''.join(nline)
-            # Search the line for matches to the curly-brackets regular
-            # expression, run the command within and write the
-            # results into the line
-            nline = []
-            s0 = (None,0)
-            for m in q.finditer(line):
-                s = m.span()
-                nline.append(line[s0[1]:s[0]])
-                cmd = line[s[0]+2:s[1]-2]
-                if verbose:
-                    print('Running command and getting output: '+cmd)
-                nline.append(subprocess.check_output(cmd, shell=True)
-                             .decode(sys.stdout.encoding).rstrip())
-                s0 = s
-            nline.append(line[s0[1]:])
-            line = ''.join(nline)
+        # Search the line for matches to the <<<...>>> pattern and execute the
+        # Python statement within. Do not write any output into the line.
+        # Effects of executing the statement (eg. the assignment of values to
+        # variables) persist for all subsequent processing of the template
+        # file.
+        nline = []
+        s0 = (None,0)
+        for m in o.finditer(line):
+            s = m.span()
+            nline.append(line[s0[1]:s[0]])
+            stm = line[s[0]+3:s[1]-3]
+            if verbose:
+                print('Executing statement: '+stm,file=sys.stderr)
+            exec(stm)
+            s0 = s
+        nline.append(line[s0[1]:])
+        line = ''.join(nline)
+        # Search the line for the <<...>> pattern, evaluate the Python
+        # expression within and write the results into the line.
+        nline = []
+        s0 = (None,0)
+        for m in p.finditer(line):
+            s = m.span()
+            nline.append(line[s0[1]:s[0]])
+            exp = line[s[0]+2:s[1]-2]
+            if verbose:
+                print('Evaluating expression: '+exp,file=sys.stderr)
+            nline.append(str(eval(exp)))
+            s0 = s
+        nline.append(line[s0[1]:])
+        line = ''.join(nline)
+        # Search the line for matches to the {{...}} pattern, run the command
+        # within and write the results into the line.
+        nline = []
+        s0 = (None,0)
+        for m in q.finditer(line):
+            global warn_curly
+            if warn_curly:
+               print('The {{...}}} notation is deprecated in favour of the run function',file=sys.stderr)
+               warn_curly=False
+            s = m.span()
+            nline.append(line[s0[1]:s[0]])
+            cmd = line[s[0]+2:s[1]-2]
+            if verbose:
+                print('Running command and getting output: '+cmd,file=sys.stderr)
+            nline.append(run(cmd))
+            s0 = s
+        nline.append(line[s0[1]:])
+        line = ''.join(nline)
         # Write the line
         outfile.write(line)
     infile.close()
@@ -154,7 +181,7 @@ def mkinput(index, tfile, ni, nj, verbose):
 
 def mk_llsub(index, n_pro, resub, mpi, openmp, queue, acct, wall, exe):
     outname = 'rom%3.3d.ll'%(index)
-    sys.stderr.write('Writing LoadLeveler script file %s\n'%(outname))
+    print('Writing LoadLeveler script file %s'%(outname),file=sys.stderr)
     outfile = open(outname, 'w')
     if mpi:
         # Some Fitzroy-specific code
@@ -233,7 +260,7 @@ def mk_llsub(index, n_pro, resub, mpi, openmp, queue, acct, wall, exe):
 
 def mk_slurm(index, n_pro, resub, mpi, openmp, queue, acct, wall, exe):
     outname = 'rom%3.3d.sl'%(index)
-    sys.stderr.write('Writing SLURM script file %s\n'%(outname))
+    print('Writing SLURM script file %s'%(outname),file=sys.stderr)
     outfile = open(outname, 'w')
     if mpi:
         # Some code specific to the Maui General queue
@@ -313,7 +340,7 @@ def mk_slurm(index, n_pro, resub, mpi, openmp, queue, acct, wall, exe):
 
 def mk_script(index, n_pro, resub, mpi, openmp, exe):
     outname = 'rom%3.3d.sh'%(index)
-    sys.stderr.write('Writing script file '+outname+'\n')
+    print('Writing script file '+outname,file=sys.stderr)
     outfile = open(outname, 'w')
     outfile.write(
         '#! /bin/bash\n'
