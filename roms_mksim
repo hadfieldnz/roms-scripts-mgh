@@ -12,7 +12,7 @@
 #        The effects of this statement (variables created, modules imported)
 #        remain in effect for the remainder of the input file processing. No
 #        corresponding output is written into the input file.
-#      
+#
 # One function and several variables are available to the Python expressions
 # and statements:
 #     run(): This function runs a command in the shell and returns the output
@@ -23,6 +23,10 @@
 
 # History (most recent first):
 #
+# MGH 2020-01-15
+#   - In Slurm scripts the --share option is no longer written for serial and
+#     OpenMP jobs as it is no longer accepted by the batch processor on the
+#     NeSI supercomputer, Maui.
 # MGH 2019-05-11
 #   - The run function was added and is available during input-file processing.
 #   - The {{...}} notation is now deprecated.
@@ -282,6 +286,11 @@ def mk_slurm(index, n_pro, resub, mpi, openmp, queue, acct, wall, exe):
             '#SBATCH --hint=nomultithread\n'
             %(index, index, n_node, n_pro, wall, usage)
             )
+        if queue:
+            outfile.write(
+                '#SBATCH --qos=%s\n'
+                %(queue)
+                )
         outfile.write(
             'date\n'
             'srun %s rom%3.3d.in\n'
@@ -299,10 +308,14 @@ def mk_slurm(index, n_pro, resub, mpi, openmp, queue, acct, wall, exe):
             '#SBATCH --ntasks=1\n'
             '#SBATCH --cpus-per-task=%d\n'
             '#SBATCH --time=%s\n'
-            '#SBATCH --share\n'
             '#SBATCH --hint=nomultithread\n'
             %(index, index, n_pro, wall)
             )
+        if queue:
+            outfile.write(
+                '#SBATCH --qos=%s\n'
+                %(queue)
+                )
         outfile.write(
             'export OMP_NUM_THREADS=%d\n'
             'date\n'
@@ -321,10 +334,14 @@ def mk_slurm(index, n_pro, resub, mpi, openmp, queue, acct, wall, exe):
             '#SBATCH --ntasks=1\n'
             '#SBATCH --cpus-per-task=1\n'
             '#SBATCH --time=%s\n'
-            '#SBATCH --share\n'
             '#SBATCH --hint=nomultithread\n'
             %(index, index, wall)
             )
+        if queue:
+            outfile.write(
+                '#SBATCH --qos=%s\n'
+                %(queue)
+                )
         outfile.write(
             'date\n'
             '%s < rom%3.3d.in\n'
